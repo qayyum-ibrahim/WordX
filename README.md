@@ -47,7 +47,7 @@ Note: games in progress live in server memory and are lost if Render restarts th
 - Visitors are counted once per device per day, with a hashed random id. Clicks go through `/go/sponsor`. These counts are simple: they do not filter bots or repeat clicks.
 
 ## Add words
-Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5.
+Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5. Use one word, letters only, and do not put the word inside its own clues. `npm test` checks this.
 
 ## Working with Claude Code
 Open the repo in Claude Code. `CLAUDE.md` holds the project rules and `ROADMAP.md` holds the plan and status.

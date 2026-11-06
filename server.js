@@ -62,6 +62,21 @@ function shuffle(arr) {
   return a;
 }
 
+// Picks `count` words, using words not in `used` first so a room does not
+// see repeats across games. When too few fresh words are left, the pool
+// starts over. Returns the words and the new `used` set.
+function pickWords(pool, count, used = new Set()) {
+  const fresh = shuffle(pool.filter((w) => !used.has(w.word)));
+  if (fresh.length >= count) {
+    const words = fresh.slice(0, count);
+    return { words, used: new Set([...used, ...words.map((w) => w.word)]) };
+  }
+  const freshNames = new Set(fresh.map((w) => w.word));
+  const rest = shuffle(pool.filter((w) => !freshNames.has(w.word)));
+  const words = fresh.concat(rest.slice(0, count - fresh.length));
+  return { words, used: new Set(words.map((w) => w.word)) };
+}
+
 function makeCode() {
   for (let tries = 0; tries < 200; tries++) {
     let code = '';
@@ -258,7 +273,9 @@ function startGame(room) {
   if (store) store.bumpStat(dayKey(), 'games').catch(() => {});
   const count = Math.min(room.rounds, WORDS.length);
   room.rounds = count;
-  room.words = shuffle(WORDS).slice(0, count);
+  const picked = pickWords(WORDS, count, room.usedWords);
+  room.words = picked.words;
+  room.usedWords = picked.used;
   room.roundIdx = 0;
   for (const p of room.players.values()) {
     p.score = 0;
@@ -385,6 +402,7 @@ io.on('connection', (socket) => {
       players: new Map(),
       rounds: DEFAULT_ROUNDS,
       words: [],
+      usedWords: new Set(),
       roundIdx: 0,
       roundStart: 0,
       endsAt: null,
@@ -572,4 +590,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { server, rooms, init, getStore: () => store, getBoard: () => board };
+module.exports = { server, rooms, init, pickWords, getStore: () => store, getBoard: () => board };

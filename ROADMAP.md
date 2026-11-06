@@ -8,14 +8,10 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - **Phase 1.5 - Accounts, daily leaderboard, prize** (done): MongoDB store, Lagos-day leaderboard, ₦1,000 winner, claim prompt, bank details emailed via Resend (not stored).
 - **Phase 2a - Google sign-in** (done): Google-only login, one-time username, no passwords.
 - **Phase 2b - Sponsor banner + stats** (done): env-set sponsor, anonymous visitor/click counts, public `/stats`.
+- **Phase 3 - Bigger word pool** (done): 179 words (about 40 Nigerian/African), word-list test, no repeat words in a room until the pool runs out.
 
 ## Phases
-### Phase 3 - Bigger word pool (next)
-- Grow `words.js` from 50 to 150+ single words, 5 clues each (broad to specific). Keep a Nigerian/African mix plus general words.
-- Add a test that checks every word: one word only, 5 clues, no duplicates, the word is not inside its own clues.
-- Avoid repeats across consecutive games when possible.
-
-### Phase 4 - Dictionary check and meanings (todo)
+### Phase 4 - Dictionary check and meanings (next)
 - Keep the curated list. Use a dictionary API only to validate words and show a short meaning after each round.
 - Must fail safe: if the API is down, the game still works.
 - Choose the API and say why (check its limits and terms; do not guess).
@@ -44,8 +40,10 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - [x] Render: confirm Auto-Deploy is on for `main`.
 - [x] UptimeRobot: ping `https://YOUR-APP.onrender.com/health` every 5 minutes.
 - [x] Test Google sign-in from a real phone via an ad-style link (Facebook/Instagram/TikTok in-app browsers may block it).
+- [ ] Read through `words.js` and flag any clue that feels wrong or too easy (the new words were written by Claude, not checked by a person).
 - [ ] Sponsor outreach: set `SPONSOR_NAME` / `SPONSOR_URL` when a brand agrees.
 
 ## Change log
 - 2026-11-06: Phases 1-2b built. Roadmap and Claude Code commands added.
 - 2026-11-06: Owner set up Atlas, Google Cloud, Resend, Render auto-deploy, UptimeRobot, and tested Google sign-in on a phone.
+- 2026-11-07: Phase 3 done. Word list grown from 50 to 179, word checks added to `npm test`, rooms avoid repeat words across games.
