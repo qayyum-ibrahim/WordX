@@ -6,6 +6,8 @@ services:
     buildCommand: npm install --omit=dev
     startCommand: npm start
     healthCheckPath: /health
+    # On a deploy, give running games up to 5 minutes (Render's maximum) to finish.
+    maxShutdownDelaySeconds: 300
     envVars:
       - key: NODE_VERSION
         value: 20
@@ -36,3 +38,6 @@ services:
       # Word meanings from Wiktionary after each round. Set to "off" to turn them off.
       - key: DICTIONARY
         value: "on"
+      # Must match maxShutdownDelaySeconds above. The server stops 5 seconds before this.
+      - key: SHUTDOWN_DELAY_SECONDS
+        value: 300

@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/words.js && node test/dictionary.js && node test/sim.js && node test/accounts.js",
+    "test": "node test/words.js && node test/dictionary.js && node test/sim.js && node test/shutdown.js && node test/accounts.js",
     "test:mongo": "node test/mongo-check.js",
     "check:dictionary": "node scripts/check-dictionary.js"
   },

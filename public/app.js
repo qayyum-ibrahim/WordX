@@ -11,6 +11,8 @@
   let lastOpened = 0;
   let user = null; // logged-in account, or null for a guest
   let board = null; // latest daily leaderboard
+  let version = null; // server version this page started with
+  let updated = false; // true once we know a newer WordX is live
 
   // ---------- storage (wrapped: it can throw in private modes) ----------
   const store = {
@@ -161,6 +163,7 @@
     const inRound = state.phase === 'round';
     const self = me();
 
+    $('updateNote').classList.toggle('hidden', !state.updating || updated);
     $('roundLabel').textContent = state.roundNum + '/' + state.rounds;
     $('myScore').textContent = self ? self.score : 0;
 
@@ -605,12 +608,34 @@
     render();
   });
 
+  // ---------- updates ----------
+  // The server says "updated" when it is about to stop for a new version, and every
+  // server sends its version on connect. Either way we ask the player to reload.
+  function showUpdated() {
+    if (updated) return;
+    updated = true;
+    store.clear(); // the old room is gone after the update
+    socket.disconnect(); // no "Reconnecting..." loop; the reload connects fresh
+    $('updateNote').classList.add('hidden');
+    document.body.classList.add('stale'); // the old game cannot be played any more
+    $('updateBar').classList.remove('hidden');
+  }
+  $('updateBar').addEventListener('click', () => location.reload());
+
+  socket.on('hello', (h) => {
+    if (!h || !h.version) return;
+    if (version && h.version !== version) showUpdated();
+    else version = h.version;
+  });
+  socket.on('updated', showUpdated);
+
   socket.on('connect', () => {
     const token = getToken();
     if (token) socket.emit('auth', { token });
     const saved = store.get();
     if (!saved) return;
     socket.emit('rejoin', saved, (res) => {
+      if (updated) return;
       if (!res || !res.ok) {
         store.clear();
         state = null;
@@ -620,7 +645,7 @@
     });
   });
 
-  socket.on('disconnect', () => toast('Connection lost. Reconnecting...'));
+  socket.on('disconnect', () => { if (!updated) toast('Connection lost. Reconnecting...'); });
 
   show('home');
 })();

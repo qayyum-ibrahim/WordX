@@ -11,16 +11,10 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - **Phase 3 - Bigger word pool** (done): 179 words (about 40 Nigerian/African), word-list test, no repeat words in a room until the pool runs out.
 - **Phase 4 - Dictionary check and meanings** (done): short meaning after each round from Wiktionary (CC BY-SA, credited and linked), fetched in the background and fail safe. `npm run check:dictionary` checks all 179 words (all found on 2026-11-07). 17 words have our own meaning because Wiktionary's first sense was wrong for the game.
 - **Phase 5 - Sponsor space, contact form, prize paused** (done): sponsor space at the top of the home page, "Advertise here" when empty, contact form emailed via Resend (owner email never shown, trap field, rate limit, length and link limits). ₦1,000 prize paused with `PRIZE_ACTIVE=off`: "Daily prize: coming soon", no winner, no claim prompt. Paused days are never paid later.
+- **Phase 6 - Smooth updates** (done): Render's limit checked in its docs: SIGTERM about 60s after new players move to the new version, then 30s by default, up to 300s with `maxShutdownDelaySeconds` (set to 300). On SIGTERM no new games start, running games keep going until they end or time is up, then players see "WordX was updated. Tap to reload." Home and lobby players see it straight away (the new version is already live, so waiting would not help them). Version check on connect, so nobody is stuck on "Reconnecting...". Games longer than about 5 minutes are still cut off.
 
 ## Phases
-### Phase 6 - Smooth updates (next)
-- First check Render's real shutdown time limit on the free plan. Do not guess it.
-- On shutdown, the server stops new games and lets running games finish before it exits (within that limit).
-- Players in the lobby see "Update coming, please wait" instead of starting a game that will be cut off.
-- After an update, show "WordX was updated. Tap to reload." instead of the endless "Reconnecting..." message.
-- Test with a simulated shutdown in the middle of a game.
-
-### Phase 7 - Ad assets (todo)
+### Phase 7 - Ad assets (next)
 - Static image ads and a short motion ad for Facebook, TikTok and Instagram. While the prize is paused, the copy must not promise cash ("play free, prizes coming soon").
 - Check the real ad rules for cash-prize promotions on each platform before finalising copy. The owner must also check Nigerian rules for cash-prize promotions (not legal advice).
 - Save files under `marketing/`.
@@ -50,6 +44,8 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - [ ] Sponsor outreach: set `SPONSOR_NAME` / `SPONSOR_URL` when a brand agrees.
 - [ ] Sponsor messages go to `ADMIN_EMAIL` now. For a separate inbox, set `CONTACT_EMAIL` in Render. With Resend's test sender this only works for your Resend account's own email; any other address needs a verified domain and `MAIL_FROM`.
 - [ ] After this deploy, send one test message through "Advertise here" on the live site and check it arrives (and is not in spam).
+- [ ] After the Phase 6 deploy: in Render, open the service, Settings, and check the shutdown delay shows 300 seconds (and that the Blueprint sync had no error). Render's docs do not say if the free plan allows it. If it is not allowed, remove `maxShutdownDelaySeconds` from `render.yaml` and set `SHUTDOWN_DELAY_SECONDS` to 30.
+- [ ] Next time you deploy while a game is running on your phone, check you see "Update coming" and then "WordX was updated. Tap to reload."
 - [ ] When you have a sponsor and want the ₦1,000 prize back, set `PRIZE_ACTIVE=on` in Render (Environment). Days before that stay unpaid.
 
 ## Change log
@@ -59,3 +55,4 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - 2026-11-07: Phase 4 done. Wiktionary meanings after each round, fail safe, `check:dictionary` script, 17 own meanings.
 - 2026-11-07: Added Phase 5 (sponsor space at top, contact form via Resend, ₦1,000 prize paused as "coming soon") and Phase 6 (smooth updates). Old Phases 5-7 are now 7-9.
 - 2026-11-07: Phase 5 done. Sponsor space at the top with "Advertise here", contact form via Resend, ₦1,000 prize paused (`PRIZE_ACTIVE`).
+- 2026-11-07: Phase 6 done. Smooth updates: running games finish (up to 5 min) before the old server stops, "Tap to reload" after updates, shutdown test added to `npm test`.

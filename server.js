@@ -25,6 +25,13 @@ const DEFAULT_ROUNDS = 5;
 const LOBBY_GRACE_MS = 30 * 1000;
 const ROOM_IDLE_MS = 15 * 60 * 1000;
 const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+// Render sends SIGTERM, then waits this long before it force-stops us. Keep it the same as
+// maxShutdownDelaySeconds in render.yaml (Render's default is 30, the most is 300).
+const SHUTDOWN_DELAY_SECONDS = Number(process.env.SHUTDOWN_DELAY_SECONDS) || 30;
+const SHUTDOWN_MARGIN_MS = 5 * 1000; // stop a little before Render's force-stop
+// Changes on every deploy. Players whose page is older are asked to reload.
+const VERSION = process.env.RENDER_GIT_COMMIT || 'boot-' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex');
+const UPDATE_MSG = 'WordX was updated. Please reload the page.';
 
 // ---------- App ----------
 const app = express();
@@ -33,7 +40,7 @@ const io = new Server(server, { pingInterval: 10000, pingTimeout: 20000 });
 
 app.set('trust proxy', 1); // Render sits behind a proxy
 app.use(express.json({ limit: '10kb' }));
-app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
+app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size, draining: !!shutdown }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = new Map();
@@ -41,6 +48,7 @@ const LB_MIN_PLAYERS = 2; // a round only counts for the daily leaderboard when 
 let store = null;
 let board = null;
 let dictionary = createDictionary(); // word meanings after each round; set DICTIONARY=off to turn off
+let shutdown = null; // set when an update is coming (see beginShutdown)
 
 // ---------- Helpers ----------
 function norm(s) {
@@ -153,6 +161,7 @@ function view(room, me) {
     nextAt: room.nextAt,
     maxPlayers: MAX_PLAYERS,
     pointsTable: POINTS,
+    updating: !!shutdown,
     players
   };
 
@@ -254,6 +263,7 @@ function advance(room) {
     room.phase = 'final';
     room.nextAt = null;
     broadcast(room);
+    if (shutdown) checkShutdown();
   } else {
     room.roundIdx++;
     startRound(room);
@@ -326,6 +336,61 @@ function removePlayer(room, p) {
   if (!checkAllDone(room)) broadcast(room);
 }
 
+// ---------- Smooth updates ----------
+// On a deploy Render moves new players to the new server first, then sends us SIGTERM.
+// Running games keep going until they end or time is up. Everyone else is told to reload,
+// which puts them on the new version straight away.
+function isRunning(room) {
+  return (room.phase === 'round' || room.phase === 'between') && [...room.players.values()].some((p) => p.connected);
+}
+
+function socketInRunningGame(s) {
+  const room = s.data.code && rooms.get(s.data.code);
+  return !!(room && isRunning(room));
+}
+
+function tellUpdated(s) {
+  s.emit('updated', { version: VERSION });
+}
+
+function checkShutdown() {
+  if (!shutdown) return;
+  const timeUp = Date.now() >= shutdown.deadline;
+  for (const s of io.sockets.sockets.values()) {
+    if (timeUp || !socketInRunningGame(s)) tellUpdated(s);
+  }
+  if (timeUp || ![...rooms.values()].some(isRunning)) finishShutdown();
+}
+
+function finishShutdown() {
+  if (!shutdown || shutdown.finished) return;
+  shutdown.finished = true;
+  clearInterval(shutdown.timer);
+  for (const room of rooms.values()) clearRoomTimer(room);
+  console.log('Shutdown: done, exiting.');
+  shutdown.exit();
+}
+
+// opts.graceMs: how long running games may keep going. opts.exit: called at the end.
+function beginShutdown(opts = {}) {
+  if (shutdown) return;
+  const graceMs = opts.graceMs != null ? opts.graceMs : Math.max(0, SHUTDOWN_DELAY_SECONDS * 1000 - SHUTDOWN_MARGIN_MS);
+  shutdown = {
+    deadline: Date.now() + graceMs,
+    finished: false,
+    exit: opts.exit || (() => {
+      io.close();
+      server.close(() => process.exit(0));
+      setTimeout(() => process.exit(0), 2000).unref();
+    })
+  };
+  const running = [...rooms.values()].filter(isRunning).length;
+  console.log('Shutdown: update coming. ' + running + ' running game(s), up to ' + Math.round(graceMs / 1000) + 's to finish.');
+  for (const room of rooms.values()) if (isRunning(room)) broadcast(room); // shows "update coming" in the game
+  shutdown.timer = setInterval(checkShutdown, 1000);
+  checkShutdown();
+}
+
 // ---------- Sockets ----------
 function ctx(socket) {
   const { code, pid } = socket.data || {};
@@ -372,6 +437,8 @@ function pushClaimToUser(userId) {
 }
 
 io.on('connection', (socket) => {
+  socket.emit('hello', { version: VERSION });
+  if (shutdown) return tellUpdated(socket); // new players belong on the new server
   if (board) socket.emit('leaderboard', board.snapshot());
 
   socket.on('auth', async (data, cb) => {
@@ -397,6 +464,7 @@ io.on('connection', (socket) => {
 
   socket.on('create', (data, cb) => {
     if (typeof cb !== 'function') return;
+    if (shutdown) return cb({ ok: false, error: UPDATE_MSG });
     const name = nameFor(socket, data);
     if (!name) return cb({ ok: false, error: 'Please enter a name.' });
     const room = {
@@ -427,6 +495,7 @@ io.on('connection', (socket) => {
 
   socket.on('join', (data, cb) => {
     if (typeof cb !== 'function') return;
+    if (shutdown) return cb({ ok: false, error: UPDATE_MSG });
     const code = String((data && data.code) || '').toUpperCase().trim();
     const name = nameFor(socket, data);
     if (!name) return cb({ ok: false, error: 'Please enter a name.' });
@@ -465,7 +534,7 @@ io.on('connection', (socket) => {
 
   socket.on('start', () => {
     const c = ctx(socket);
-    if (!c || c.room.phase !== 'lobby' || c.room.hostId !== c.p.id) return;
+    if (!c || shutdown || c.room.phase !== 'lobby' || c.room.hostId !== c.p.id) return;
     startGame(c.room);
   });
 
@@ -588,11 +657,13 @@ async function init(opts = {}) {
 
 if (require.main === module) {
   init()
-    .then(() => server.listen(PORT, () => console.log(`WordX running on port ${PORT}`)))
+    .then(() => server.listen(PORT, () => console.log(`WordX running on port ${PORT} (version ${VERSION})`)))
     .catch((e) => {
       console.error('Failed to start:', e.message);
       process.exit(1);
     });
+  process.on('SIGTERM', () => beginShutdown());
+  process.on('SIGINT', () => beginShutdown({ graceMs: 0 }));
 }
 
-module.exports = { server, rooms, init, pickWords, getStore: () => store, getBoard: () => board };
+module.exports = { server, rooms, init, pickWords, beginShutdown, VERSION, getStore: () => store, getBoard: () => board };

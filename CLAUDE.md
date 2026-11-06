@@ -17,7 +17,7 @@ Real-time multiplayer word-guessing game. 5 category clues (1 open, 4 hidden). W
 - `sponsor.js` sponsor banner, visitor/click stats, `/stats`.
 - `words.js` word list (single words only, 5 clues each, broad to specific).
 - `public/` mobile-first front end (`index.html`, `app.js`, `style.css`, `stats.html`).
-- `test/` `sim.js` (game), `accounts.js` (auth, leaderboard, prize, sponsor), `mongo-check.js` (needs a real `MONGODB_URI`).
+- `test/` `sim.js` (game), `shutdown.js` (smooth updates), `accounts.js` (auth, leaderboard, prize, sponsor), `mongo-check.js` (needs a real `MONGODB_URI`).
 - Hosting: Render (Blueprint in `render.yaml`). Secrets are `sync: false` and typed in the Render dashboard.
 
 ## Rules

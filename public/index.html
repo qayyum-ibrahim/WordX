@@ -129,6 +129,7 @@
         <div><span class="muted">Score</span> <b id="myScore">0</b></div>
       </header>
       <div class="timer-track"><div id="timerBar" class="timer-bar"></div></div>
+      <div id="updateNote" class="banner warn hidden">Update coming, please wait. This game will finish first.</div>
 
       <div id="clues" class="clues"></div>
 
@@ -209,6 +210,7 @@
   </div>
 
   <div id="toast" class="toast"></div>
+  <button id="updateBar" class="update-bar hidden" type="button">WordX was updated. Tap to reload.</button>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="/socket.io/socket.io.js"></script>

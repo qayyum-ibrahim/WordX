@@ -62,6 +62,14 @@ Note: games in progress live in server memory and are lost if Render restarts th
 - Check every word: `npm run check:dictionary` (needs internet). It prints each meaning so a person can read them.
 - To turn meanings off, set `DICTIONARY=off`.
 
+## Updates without cutting games
+- How Render deploys (from its docs): the new version starts, new players are sent to it, then about 60 seconds later the old server gets a "please stop" signal (SIGTERM). The old server then has a "shutdown delay" before Render force-stops it. The default is 30 seconds; the most is 300 seconds (5 minutes). `render.yaml` sets it to 300 with `maxShutdownDelaySeconds`.
+- `SHUTDOWN_DELAY_SECONDS` must match that number. The server stops 5 seconds before it.
+- When the signal comes: no new games start. Players on the home screen or in a lobby see "WordX was updated. Tap to reload." straight away, because the new version is already live. Players in a running game see "Update coming, please wait. This game will finish first." and keep playing. When their game ends (or time runs out), they see the reload message too.
+- A long game (many rounds) can take more than 5 minutes. Those games are stopped at the time limit. Games live in the server's memory, so they cannot move to the new server.
+- Every server sends its version when a player connects. If a player's page talks to a newer server, they get the reload message. So even if Render stops the old server early, players never get stuck on "Reconnecting...".
+- Render's docs do not say whether the free plan honours the 300-second setting. If it does not, games get only about 25 seconds before they are cut off.
+
 ## Add words
 Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5. Use one word, letters only, and do not put the word inside its own clues. `npm test` checks this. Then run `npm run check:dictionary` and read the new word's meaning. If it is the wrong sense, add a short `meaning` to the word in `words.js`.
 
