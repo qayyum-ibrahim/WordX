@@ -27,3 +27,6 @@ services:
         value: 5
       - key: CLAIM_HOURS
         value: 48
+      # Word meanings from Wiktionary after each round. Set to "off" to turn them off.
+      - key: DICTIONARY
+        value: "on"

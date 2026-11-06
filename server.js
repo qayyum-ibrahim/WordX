@@ -10,6 +10,7 @@ const { createStore } = require('./store');
 const { createBoard, dayKey } = require('./board');
 const { registerAuthRoutes, userFromRequest, limiter } = require('./auth');
 const { registerSponsorRoutes } = require('./sponsor');
+const { createDictionary } = require('./dictionary');
 
 // ---------- Settings ----------
 const PORT = process.env.PORT || 3000;
@@ -39,6 +40,7 @@ const rooms = new Map();
 const LB_MIN_PLAYERS = 2; // a round only counts for the daily leaderboard when 2+ players are in the room
 let store = null;
 let board = null;
+let dictionary = createDictionary(); // word meanings after each round; set DICTIONARY=off to turn off
 
 // ---------- Helpers ----------
 function norm(s) {
@@ -171,6 +173,7 @@ function view(room, me) {
 
   if (room.phase === 'between') {
     v.results = room.lastResults;
+    v.meaning = dictionary.meaningFor(cur); // null when Wiktionary had nothing or was down
   }
 
   if (room.phase === 'final') {
@@ -276,6 +279,7 @@ function startGame(room) {
   const picked = pickWords(WORDS, count, room.usedWords);
   room.words = picked.words;
   room.usedWords = picked.used;
+  dictionary.prefetch(room.words).catch(() => {}); // background only; never delays the game
   room.roundIdx = 0;
   for (const p of room.players.values()) {
     p.score = 0;
@@ -550,6 +554,7 @@ setInterval(() => {
 // Sets up the database, accounts, leaderboard and the 30-second background job.
 async function init(opts = {}) {
   store = opts.store || (await createStore(process.env.MONGODB_URI));
+  if (opts.dictionary) dictionary = opts.dictionary;
   board = createBoard({
     store,
     mailer: opts.mailer,

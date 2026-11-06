@@ -238,6 +238,14 @@
     if (state.phase === 'between') {
       reveal.classList.remove('hidden');
       $('revealWord').textContent = state.word;
+      const m = state.meaning;
+      $('revealMeaning').classList.toggle('hidden', !m);
+      if (m) {
+        $('meaningText').textContent = m.text;
+        const src = $('meaningSource');
+        src.classList.toggle('hidden', !m.url);
+        if (m.url) src.href = m.url;
+      }
       $('revealList').innerHTML = state.results
         .map((r) => {
           const gain = r.solved

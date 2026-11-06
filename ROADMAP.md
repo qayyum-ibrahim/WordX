@@ -9,14 +9,10 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - **Phase 2a - Google sign-in** (done): Google-only login, one-time username, no passwords.
 - **Phase 2b - Sponsor banner + stats** (done): env-set sponsor, anonymous visitor/click counts, public `/stats`.
 - **Phase 3 - Bigger word pool** (done): 179 words (about 40 Nigerian/African), word-list test, no repeat words in a room until the pool runs out.
+- **Phase 4 - Dictionary check and meanings** (done): short meaning after each round from Wiktionary (CC BY-SA, credited and linked), fetched in the background and fail safe. `npm run check:dictionary` checks all 179 words (all found on 2026-11-07). 17 words have our own meaning because Wiktionary's first sense was wrong for the game.
 
 ## Phases
-### Phase 4 - Dictionary check and meanings (next)
-- Keep the curated list. Use a dictionary API only to validate words and show a short meaning after each round.
-- Must fail safe: if the API is down, the game still works.
-- Choose the API and say why (check its limits and terms; do not guess).
-
-### Phase 5 - Ad assets (todo)
+### Phase 5 - Ad assets (next)
 - Static image ads and a short motion ad for Facebook, TikTok and Instagram: "play free, win cash prizes".
 - Check the real ad rules for cash-prize promotions on each platform before finalising copy. The owner must also check Nigerian rules for cash-prize promotions (not legal advice).
 - Save files under `marketing/`.
@@ -41,9 +37,12 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - [x] UptimeRobot: ping `https://YOUR-APP.onrender.com/health` every 5 minutes.
 - [x] Test Google sign-in from a real phone via an ad-style link (Facebook/Instagram/TikTok in-app browsers may block it).
 - [ ] Read through `words.js` and flag any clue that feels wrong or too easy (the new words were written by Claude, not checked by a person).
+- [ ] Read the 17 hand-written `meaning:` lines in `words.js` (Ankara, Zobo, Keke, Jollof, Torch and others). Claude wrote them; a person has not checked them.
+- [ ] Optional: run `npm run check:dictionary` and skim the Wiktionary meanings for any that read oddly for the game.
 - [ ] Sponsor outreach: set `SPONSOR_NAME` / `SPONSOR_URL` when a brand agrees.
 
 ## Change log
 - 2026-11-06: Phases 1-2b built. Roadmap and Claude Code commands added.
 - 2026-11-06: Owner set up Atlas, Google Cloud, Resend, Render auto-deploy, UptimeRobot, and tested Google sign-in on a phone.
 - 2026-11-07: Phase 3 done. Word list grown from 50 to 179, word checks added to `npm test`, rooms avoid repeat words across games.
+- 2026-11-07: Phase 4 done. Wiktionary meanings after each round, fail safe, `check:dictionary` script, 17 own meanings.

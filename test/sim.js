@@ -9,6 +9,14 @@ const assert = require('assert');
 const { io } = require('socket.io-client');
 const WORDS = require('../words');
 const { server, rooms, init } = require('../server');
+const { createDictionary } = require('../dictionary');
+
+// Fake Wiktionary, so the test needs no internet.
+const fakeWiktionary = async (url) => ({
+  status: 200,
+  ok: true,
+  json: async () => ({ en: [{ language: 'English', partOfSpeech: 'Noun', definitions: [{ definition: 'A <b>test</b> meaning.' }] }] })
+});
 
 let passed = 0;
 function ok(name) { passed++; console.log('  ok  ' + name); }
@@ -46,7 +54,7 @@ async function main() {
   }
   ok('word list: ' + WORDS.length + ' unique words, 5 clues each');
 
-  await init(); // memory storage, since MONGODB_URI is not set in tests
+  await init({ dictionary: createDictionary({ enabled: true, fetch: fakeWiktionary }) }); // memory storage, since MONGODB_URI is not set in tests
   await new Promise((r) => server.listen(0, r));
   const port = server.address().port;
 
@@ -125,8 +133,14 @@ async function main() {
   assert.strictEqual(A.state.results.length, 2);
   ok('round ends when everyone is done; word and all clues revealed');
 
+  const w0 = rooms.get(code).words[0];
+  if (w0.meaning) assert.deepStrictEqual(A.state.meaning, { text: w0.meaning, url: null });
+  else assert.deepStrictEqual(A.state.meaning, { text: 'A test meaning.', url: 'https://en.wiktionary.org/wiki/' + w0.word.toLowerCase() });
+  ok('meaning of the word shown after the round');
+
   // Round 2: A needs all 5 clues (0 points). B does nothing -> timer ends.
   await A.wait((s) => s.phase === 'round' && s.roundNum === 2);
+  assert.strictEqual(A.state.meaning, undefined, 'meaning must not be sent during a round (it gives the word away)');
   word = rooms.get(code).words[1].word;
   for (let i = 0; i < 4; i++) {
     r = await A.emit('guess', { text: 'nope' + i });
@@ -142,6 +156,7 @@ async function main() {
   assert.strictEqual(bRes.points, 0);
   assert.strictEqual(bRes.solved, false);
   ok('round ends on timer; idle player gets 0');
+
 
   // Final
   await A.wait((s) => s.phase === 'final', 5000);

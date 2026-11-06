@@ -46,8 +46,17 @@ Note: games in progress live in server memory and are lost if Render restarts th
 - To show a sponsor, set these in Render > Environment: `SPONSOR_NAME`, `SPONSOR_URL` (must be https), and optionally `SPONSOR_TEXT` and `SPONSOR_IMAGE` (an https image link). Remove `SPONSOR_NAME` to hide the banner.
 - Visitors are counted once per device per day, with a hashed random id. Clicks go through `/go/sponsor`. These counts are simple: they do not filter bots or repeat clicks.
 
+## Word meanings
+- After each round the game shows a short meaning of the word, from Wiktionary (en.wiktionary.org).
+- Why Wiktionary: its text has a clear licence (CC BY-SA) and the free API needs no key. We tried dictionaryapi.dev too, but it returned errors for "jollof" and "okra" in our test, and its pages do not say where its data comes from or how it may be used.
+- CC BY-SA means we must credit Wiktionary and link to the entry. The game does this under every meaning. This is not legal advice.
+- Wikimedia calls this API "experimental", so it may change. The game is built to fail safe: meanings are fetched in the background when a game starts, with a 4-second limit. If Wiktionary is slow or down, the round shows no meaning and nothing else changes.
+- Wiktionary's first meaning is sometimes the wrong sense for the game (for example "torch" as a burning stick). For those words, `words.js` has a short `meaning` of our own, and the game uses it instead.
+- Check every word: `npm run check:dictionary` (needs internet). It prints each meaning so a person can read them.
+- To turn meanings off, set `DICTIONARY=off`.
+
 ## Add words
-Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5. Use one word, letters only, and do not put the word inside its own clues. `npm test` checks this.
+Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5. Use one word, letters only, and do not put the word inside its own clues. `npm test` checks this. Then run `npm run check:dictionary` and read the new word's meaning. If it is the wrong sense, add a short `meaning` to the word in `words.js`.
 
 ## Working with Claude Code
 Open the repo in Claude Code. `CLAUDE.md` holds the project rules and `ROADMAP.md` holds the plan and status.

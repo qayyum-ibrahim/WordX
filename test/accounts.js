@@ -11,6 +11,7 @@ const { io } = require('socket.io-client');
 const { memoryStore } = require('../store');
 const { dayKey } = require('../board');
 const { server, rooms, init, getStore, getBoard } = require('../server');
+const { createDictionary } = require('../dictionary');
 
 let passed = 0;
 const ok = (name) => { passed++; console.log('  ok  ' + name); };
@@ -60,6 +61,8 @@ async function main() {
       if (!sub || !email) throw new Error('bad token');
       return { sub, email, emailVerified: v === 'verified', name: sub };
     },
+    // Wiktionary is "down" for this whole test: games and scores must still work.
+    dictionary: createDictionary({ enabled: true, fetch: async () => { throw new Error('dictionary down (expected in this test)'); } }),
     skipStartupSettle: true, // the test adds yesterday's scores itself before settling
     mailer: async (subject, text) => { mails.push({ subject, text }); return true; }
   });
@@ -144,16 +147,20 @@ async function main() {
 
   for (let round = 0; round < 2; round++) {
     await A.wait((c) => c.state.phase === 'round' && c.state.roundNum === round + 1);
-    const word = rooms.get(code).words[round].word;
+    const entry = rooms.get(code).words[round];
+    const word = entry.word;
     await A.emit('guess', { text: word });            // Ade: 20
     await B.emit('guess', { text: 'wrong' });         // Bola: miss then hit = 15
     await B.emit('guess', { text: word });
     await G.emit('guess', { text: word });            // guest: 20, but not on the board
     await A.wait((c) => c.state.phase === 'between');
+    // Wiktionary is down: no meaning, unless the word has its own in words.js.
+    assert.deepStrictEqual(A.state.meaning, entry.meaning ? { text: entry.meaning, url: null } : null);
   }
   await A.wait((c) => c.board && c.board.top.length === 2 && c.board.top[0].points === 40, 4000);
   assert.deepStrictEqual(A.board.top.map((r) => [r.username, r.points, r.rounds]), [['Ade', 40, 2], ['Bola', 30, 2]]);
   ok('live leaderboard updates; guests are not listed');
+  ok('dictionary down: rounds and scores still work');
 
   // ---- a solo player does not earn leaderboard points
   const reg = await signIn('g-solo', 'solo@mail.com');
