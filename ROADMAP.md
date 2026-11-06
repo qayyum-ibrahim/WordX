@@ -38,13 +38,14 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 (add with `/add-phase`)
 
 ## Owner to-do (things only the owner can do)
-- [ ] MongoDB Atlas: create free cluster, set `MONGODB_URI` in Render, then run `MONGODB_URI="..." npm run test:mongo`.
-- [ ] Google Cloud: OAuth Web client ID. Authorized JavaScript origins = the Render URL + `http://localhost:3000`. Leave redirect URIs empty. Set consent screen to "In production". Put the ID in Render as `GOOGLE_CLIENT_ID`.
-- [ ] Resend: API key and `ADMIN_EMAIL` in Render.
-- [ ] Render: confirm Auto-Deploy is on for `main`.
-- [ ] UptimeRobot: ping `https://YOUR-APP.onrender.com/health` every 5 minutes.
-- [ ] Test Google sign-in from a real phone via an ad-style link (Facebook/Instagram/TikTok in-app browsers may block it).
+- [x] MongoDB Atlas: create free cluster, set `MONGODB_URI` in Render, then run `MONGODB_URI="..." npm run test:mongo`.
+- [x] Google Cloud: OAuth Web client ID. Authorized JavaScript origins = the Render URL + `http://localhost:3000`. Leave redirect URIs empty. Set consent screen to "In production". Put the ID in Render as `GOOGLE_CLIENT_ID`.
+- [x] Resend: API key and `ADMIN_EMAIL` in Render.
+- [x] Render: confirm Auto-Deploy is on for `main`.
+- [x] UptimeRobot: ping `https://YOUR-APP.onrender.com/health` every 5 minutes.
+- [x] Test Google sign-in from a real phone via an ad-style link (Facebook/Instagram/TikTok in-app browsers may block it).
 - [ ] Sponsor outreach: set `SPONSOR_NAME` / `SPONSOR_URL` when a brand agrees.
 
 ## Change log
 - 2026-11-06: Phases 1-2b built. Roadmap and Claude Code commands added.
+- 2026-11-06: Owner set up Atlas, Google Cloud, Resend, Render auto-deploy, UptimeRobot, and tested Google sign-in on a phone.
