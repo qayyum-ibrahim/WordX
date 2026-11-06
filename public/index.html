@@ -19,11 +19,9 @@
       <div id="authBar" class="card auth-bar">
         <div id="authGuest">
           <div class="auth-title">&#127942; Win &#8358;1,000 every day</div>
-          <div class="muted">Log in to enter today's leaderboard.</div>
-          <div class="row gap">
-            <button id="openLogin" class="btn">Log in</button>
-            <button id="openSignup" class="btn primary">Sign up</button>
-          </div>
+          <div class="muted">Sign in to enter today's leaderboard.</div>
+          <div id="googleBtn" class="google-btn"></div>
+          <p id="googleNote" class="muted small hidden"></p>
         </div>
         <div id="authUser" class="hidden auth-user">
           <div>Playing as <b id="authName"></b></div>
@@ -34,7 +32,7 @@
       <div class="card">
         <div id="nameWrap">
           <label for="nameInput">Your name</label>
-          <input id="nameInput" type="text" maxlength="16" placeholder="e.g. Qayyum" autocomplete="off" />
+          <input id="nameInput" type="text" maxlength="16" placeholder="e.g. Alex" autocomplete="off" />
         </div>
 
         <button id="createBtn" class="btn primary">Create a room</button>
@@ -149,19 +147,16 @@
 
   </main>
 
-  <!-- Log in / sign up -->
-  <div id="authModal" class="overlay center hidden">
+  <!-- Pick a username (blocking, shown once after first Google sign-in) -->
+  <div id="nameModal" class="overlay center hidden">
     <div class="sheet">
-      <h3 id="authTitle">Log in</h3>
-      <form id="authForm">
-        <input id="authUsername" type="text" maxlength="254" placeholder="Username or email" autocomplete="username" autocapitalize="off" />
-        <input id="authEmail" type="text" maxlength="254" placeholder="Email" autocomplete="email" inputmode="email" autocapitalize="off" />
-        <input id="authPassword" type="password" maxlength="100" placeholder="Password" autocomplete="current-password" />
-        <p id="authError" class="error"></p>
-        <button id="authSubmit" class="btn primary big" type="submit">Log in</button>
+      <h3>Choose your username</h3>
+      <p class="muted small">This is the name other players and the leaderboard will see. You can't change it later.</p>
+      <form id="nameForm">
+        <input id="usernameInput" type="text" maxlength="16" placeholder="3-16 letters, numbers or _" autocomplete="off" autocapitalize="off" />
+        <p id="nameError" class="error"></p>
+        <button id="nameSubmit" class="btn primary big" type="submit">Save username</button>
       </form>
-      <button id="authSwitch" class="btn ghost"></button>
-      <button id="authClose" class="btn ghost">Cancel</button>
     </div>
   </div>
 
@@ -185,6 +180,7 @@
 
   <div id="toast" class="toast"></div>
 
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>

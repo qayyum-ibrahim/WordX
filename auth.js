@@ -1,25 +1,14 @@
 'use strict';
-// Sign up, log in, log out. Passwords are hashed with scrypt.
-// Sessions are random tokens; only a hash of the token is stored.
+// Sign in with Google. No passwords are stored.
+//  1. The browser gets a signed ID token from Google.
+//  2. The server checks the token (signature, audience, verified email).
+//  3. New players pick a username once. Sessions are random tokens; only a hash is stored.
 
 const crypto = require('crypto');
-const { promisify } = require('util');
-const scrypt = promisify(crypto.scrypt);
 
 const USERNAME_RE = /^[A-Za-z0-9_]{3,16}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const RESERVED = new Set(['admin', 'administrator', 'wordx', 'moderator', 'support', 'system', 'staff', 'official']);
 const SESSION_MS = 30 * 24 * 3600 * 1000;
-
-async function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
-  const key = await scrypt(password, salt, 64);
-  return { salt, hash: key.toString('hex') };
-}
-
-async function checkPassword(password, user) {
-  const key = await scrypt(password, user.salt, 64);
-  const known = Buffer.from(user.hash, 'hex');
-  return known.length === key.length && crypto.timingSafeEqual(known, key);
-}
 
 function bearer(req) {
   const h = req.headers.authorization || '';
@@ -35,6 +24,18 @@ async function newSession(store, userId) {
   const token = crypto.randomBytes(32).toString('hex');
   await store.createSession(userId, token, Date.now() + SESSION_MS);
   return token;
+}
+
+// Real verifier: checks the token with Google's public keys.
+function googleVerifierFor(clientId) {
+  if (!clientId) return null;
+  const { OAuth2Client } = require('google-auth-library');
+  const client = new OAuth2Client(clientId);
+  return async (credential) => {
+    const ticket = await client.verifyIdToken({ idToken: credential, audience: clientId });
+    const p = ticket.getPayload();
+    return { sub: p.sub, email: p.email, emailVerified: p.email_verified === true, name: p.name };
+  };
 }
 
 // Very small per-IP rate limiter.
@@ -59,58 +60,71 @@ function limiter(max, windowMs) {
 
 const fail = (res, error, code = 400) => res.status(code).json({ ok: false, error });
 
-function registerAuthRoutes(app, store) {
+function registerAuthRoutes(app, store, { googleClientId, verifyGoogle } = {}) {
+  const verify = verifyGoogle || googleVerifierFor(googleClientId);
   const rate = limiter(30, 10 * 60 * 1000);
 
-  app.post('/api/signup', rate, async (req, res) => {
+  app.get('/api/config', (req, res) => res.json({ googleClientId: googleClientId || null }));
+
+  app.post('/api/google', rate, async (req, res) => {
     try {
-      const body = req.body || {};
-      const username = String(body.username || '').trim();
-      const email = String(body.email || '').trim();
-      const password = body.password;
-      if (!USERNAME_RE.test(username)) return fail(res, 'Username must be 3-16 letters, numbers or underscores.');
-      if (email.length > 254 || !EMAIL_RE.test(email)) return fail(res, 'Enter a valid email address.');
-      if (typeof password !== 'string' || password.length < 6 || password.length > 100) {
-        return fail(res, 'Password must be at least 6 characters.');
+      if (!verify) return fail(res, 'Google sign-in is not set up yet.', 503);
+      const credential = req.body && req.body.credential;
+      if (typeof credential !== 'string' || !credential || credential.length > 4000) {
+        return fail(res, 'Missing Google sign-in details.');
       }
-      const { salt, hash } = await hashPassword(password);
-      const user = {
-        id: crypto.randomUUID(),
-        username,
-        usernameLower: username.toLowerCase(),
-        email,
-        emailLower: email.toLowerCase(),
-        salt,
-        hash,
-        createdAt: Date.now()
-      };
+      let g;
       try {
-        await store.createUser(user);
+        g = await verify(credential);
       } catch (e) {
-        if (e.message === 'USERNAME_TAKEN') return fail(res, 'That username is taken.');
-        if (e.message === 'EMAIL_TAKEN') return fail(res, 'That email already has an account.');
-        throw e;
+        return fail(res, 'Google sign-in failed. Please try again.', 401);
+      }
+      if (!g || !g.sub || !g.email || !g.emailVerified) return fail(res, 'Your Google email is not verified.', 401);
+
+      let user = await store.findUserByGoogleSub(g.sub);
+      if (!user) {
+        try {
+          user = await store.createUser({
+            id: crypto.randomUUID(),
+            googleSub: g.sub,
+            email: g.email,
+            emailLower: g.email.toLowerCase(),
+            username: null,
+            usernameLower: null,
+            createdAt: Date.now()
+          });
+        } catch (e) {
+          if (e.message === 'ACCOUNT_EXISTS') user = await store.findUserByGoogleSub(g.sub); // double tap
+          else if (e.message === 'EMAIL_TAKEN') return fail(res, 'That email is already linked to another account.', 409);
+          else throw e;
+        }
       }
       const token = await newSession(store, user.id);
-      res.json({ ok: true, token, user: { username } });
+      res.json({ ok: true, token, user: { username: user.username || null }, needsUsername: !user.username });
     } catch (e) {
-      console.error('signup error', e.message);
+      console.error('google sign-in error:', e.message);
       fail(res, 'Something went wrong. Please try again.', 500);
     }
   });
 
-  app.post('/api/login', rate, async (req, res) => {
+  app.post('/api/username', rate, async (req, res) => {
     try {
-      const body = req.body || {};
-      const login = String(body.login || '').trim();
-      const password = body.password;
-      if (!login || typeof password !== 'string') return fail(res, 'Enter your username and password.');
-      const user = await store.findUserByLogin(login);
-      if (!user || !(await checkPassword(password, user))) return fail(res, 'Wrong username or password.', 401);
-      const token = await newSession(store, user.id);
-      res.json({ ok: true, token, user: { username: user.username } });
+      const user = await userFromRequest(store, req);
+      if (!user) return fail(res, 'Please sign in again.', 401);
+      if (user.username) return fail(res, 'You already have a username.');
+      const username = String((req.body && req.body.username) || '').trim();
+      if (!USERNAME_RE.test(username)) return fail(res, 'Use 3 to 16 letters, numbers or underscores.');
+      if (RESERVED.has(username.toLowerCase())) return fail(res, 'That username is not available.');
+      try {
+        const updated = await store.setUsername(user.id, username);
+        res.json({ ok: true, user: { username: updated.username } });
+      } catch (e) {
+        if (e.message === 'USERNAME_TAKEN') return fail(res, 'That username is taken. Try another.');
+        if (e.message === 'USERNAME_SET') return fail(res, 'You already have a username.');
+        throw e;
+      }
     } catch (e) {
-      console.error('login error', e.message);
+      console.error('username error:', e.message);
       fail(res, 'Something went wrong. Please try again.', 500);
     }
   });
@@ -128,12 +142,12 @@ function registerAuthRoutes(app, store) {
   app.get('/api/me', async (req, res) => {
     try {
       const user = await userFromRequest(store, req);
-      if (!user) return fail(res, 'Not logged in.', 401);
-      res.json({ ok: true, user: { username: user.username } });
+      if (!user) return fail(res, 'Not signed in.', 401);
+      res.json({ ok: true, user: { username: user.username || null }, needsUsername: !user.username });
     } catch (e) {
       fail(res, 'Something went wrong.', 500);
     }
   });
 }
 
-module.exports = { registerAuthRoutes, userFromRequest, limiter, fail, USERNAME_RE, EMAIL_RE };
+module.exports = { registerAuthRoutes, userFromRequest, limiter, fail, USERNAME_RE };

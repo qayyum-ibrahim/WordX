@@ -18,14 +18,22 @@ const { MongoClient } = require('mongodb');
 (async () => {
   const store = await mongoStore(process.env.MONGODB_URI);
   try {
-    const mk = (name) => ({ id: crypto.randomUUID(), username: name, usernameLower: name.toLowerCase(), email: name + '@x.com', emailLower: (name + '@x.com').toLowerCase(), salt: 's', hash: 'h', createdAt: Date.now() });
+    const mk = (name, named = true) => ({ id: crypto.randomUUID(), googleSub: 'g-' + name, email: name + '@x.com', emailLower: (name + '@x.com').toLowerCase(), username: named ? name : null, usernameLower: named ? name.toLowerCase() : null, createdAt: Date.now() });
     const a = mk('Ade'), b = mk('Bola');
     await store.createUser(a);
     await store.createUser(b);
-    await assert.rejects(() => store.createUser({ ...mk('ade'), id: crypto.randomUUID() }), /USERNAME_TAKEN/);
+    await assert.rejects(() => store.createUser({ ...mk('ade'), googleSub: 'g-new', emailLower: 'new@x.com', id: crypto.randomUUID() }), /USERNAME_TAKEN/);
     await assert.rejects(() => store.createUser({ ...mk('Other'), emailLower: 'ade@x.com', id: crypto.randomUUID() }), /EMAIL_TAKEN/);
-    assert.strictEqual((await store.findUserByLogin('ADE@x.com')).username, 'Ade');
-    console.log('  ok  users: create, unique username/email, find by name or email');
+    await assert.rejects(() => store.createUser({ ...mk('Third'), googleSub: 'g-Ade', id: crypto.randomUUID() }), /ACCOUNT_EXISTS/);
+    assert.strictEqual((await store.findUserByGoogleSub('g-Ade')).username, 'Ade');
+    // two users without a username must both be allowed
+    const n1 = mk('N1', false), n2 = mk('N2', false);
+    await store.createUser(n1);
+    await store.createUser(n2);
+    assert.strictEqual((await store.setUsername(n1.id, 'Newbie')).username, 'Newbie');
+    await assert.rejects(() => store.setUsername(n2.id, 'newbie'), /USERNAME_TAKEN/);
+    await assert.rejects(() => store.setUsername(n1.id, 'Again'), /USERNAME_SET/);
+    console.log('  ok  users: create, unique googleSub/email/username, set username once');
 
     await store.createSession(a.id, 'tok1', Date.now() + 60000);
     assert.strictEqual((await store.findSessionUser('tok1')).username, 'Ade');

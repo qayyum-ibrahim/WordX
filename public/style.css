@@ -271,3 +271,4 @@ select option { color: #111; }
 .lb-note { margin-top: 10px; font-size: 0.8rem; }
 .lb-last { margin-top: 8px; font-size: 0.9rem; }
 .lb-last b { color: var(--accent); }
+.google-btn { display: flex; justify-content: center; margin: 12px 0 4px; min-height: 44px; }

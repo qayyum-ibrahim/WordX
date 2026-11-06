@@ -12,8 +12,9 @@ const clone = (o) => (o ? { ...o } : null);
 // ---------------------------------------------------------------- memory
 function memoryStore() {
   const users = new Map();
-  const nameIdx = new Map();
+  const nameIdx = new Map(); // lowercase username -> user id (only users who have picked a username)
   const mailIdx = new Map();
+  const subIdx = new Map(); // Google account id -> user id
   const sessions = new Map();
   const daily = new Map();
   const winners = new Map();
@@ -22,17 +23,30 @@ function memoryStore() {
     kind: 'memory',
 
     async createUser(u) {
-      if (nameIdx.has(u.usernameLower)) throw new Error('USERNAME_TAKEN');
+      if (subIdx.has(u.googleSub)) throw new Error('ACCOUNT_EXISTS');
       if (mailIdx.has(u.emailLower)) throw new Error('EMAIL_TAKEN');
+      if (u.usernameLower && nameIdx.has(u.usernameLower)) throw new Error('USERNAME_TAKEN');
       users.set(u.id, { ...u });
-      nameIdx.set(u.usernameLower, u.id);
+      subIdx.set(u.googleSub, u.id);
       mailIdx.set(u.emailLower, u.id);
+      if (u.usernameLower) nameIdx.set(u.usernameLower, u.id);
       return { ...u };
     },
-    async findUserByLogin(login) {
-      const l = String(login).toLowerCase();
-      const id = nameIdx.get(l) || mailIdx.get(l);
+    async findUserByGoogleSub(sub) {
+      const id = subIdx.get(sub);
       return id ? clone(users.get(id)) : null;
+    },
+    // Sets the username once. Throws USERNAME_TAKEN or USERNAME_SET.
+    async setUsername(id, username) {
+      const u = users.get(id);
+      if (!u) throw new Error('NO_USER');
+      if (u.username) throw new Error('USERNAME_SET');
+      const lower = username.toLowerCase();
+      if (nameIdx.has(lower)) throw new Error('USERNAME_TAKEN');
+      u.username = username;
+      u.usernameLower = lower;
+      nameIdx.set(lower, id);
+      return clone(u);
     },
     async findUserById(id) {
       return clone(users.get(id));
@@ -106,8 +120,10 @@ async function mongoStore(uri) {
   const winners = db.collection('winners');
   const noId = { projection: { _id: 0 } };
 
-  await users.createIndex({ usernameLower: 1 }, { unique: true });
+  await users.createIndex({ googleSub: 1 }, { unique: true });
   await users.createIndex({ emailLower: 1 }, { unique: true });
+  // Unique only for users who have picked a username (others have null).
+  await users.createIndex({ usernameLower: 1 }, { unique: true, partialFilterExpression: { usernameLower: { $type: 'string' } } });
   await users.createIndex({ id: 1 }, { unique: true });
   await sessions.createIndex({ tokenHash: 1 }, { unique: true });
   await sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // auto-delete expired sessions
@@ -125,15 +141,26 @@ async function mongoStore(uri) {
       } catch (e) {
         if (e && e.code === 11000) {
           const k = JSON.stringify(e.keyPattern || e.keyValue || {});
+          if (k.includes('googleSub')) throw new Error('ACCOUNT_EXISTS');
           throw new Error(k.includes('emailLower') ? 'EMAIL_TAKEN' : 'USERNAME_TAKEN');
         }
         throw e;
       }
       return { ...u };
     },
-    async findUserByLogin(login) {
-      const l = String(login).toLowerCase();
-      return users.findOne({ $or: [{ usernameLower: l }, { emailLower: l }] }, noId);
+    async findUserByGoogleSub(sub) {
+      return users.findOne({ googleSub: sub }, noId);
+    },
+    async setUsername(id, username) {
+      let r;
+      try {
+        r = await users.updateOne({ id, username: null }, { $set: { username, usernameLower: username.toLowerCase() } });
+      } catch (e) {
+        if (e && e.code === 11000) throw new Error('USERNAME_TAKEN');
+        throw e;
+      }
+      if (r.matchedCount === 0) throw new Error('USERNAME_SET');
+      return users.findOne({ id }, noId);
     },
     async findUserById(id) {
       return users.findOne({ id }, noId);

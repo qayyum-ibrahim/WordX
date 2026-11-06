@@ -54,6 +54,12 @@ async function main() {
   const mails = [];
   await init({
     store: memoryStore(),
+    // Fake Google check: the "credential" is "sub|email|verified"
+    googleVerifier: async (cred) => {
+      const [sub, email, v] = String(cred).split('|');
+      if (!sub || !email) throw new Error('bad token');
+      return { sub, email, emailVerified: v === 'verified', name: sub };
+    },
     skipStartupSettle: true, // the test adds yesterday's scores itself before settling
     mailer: async (subject, text) => { mails.push({ subject, text }); return true; }
   });
@@ -63,32 +69,58 @@ async function main() {
   const store = getStore();
   const board = getBoard();
 
-  // ---- accounts
-  assert.strictEqual((await api('/api/signup', 'POST', { username: 'a', email: 'x@y.com', password: 'secret1' })).ok, false);
-  assert.strictEqual((await api('/api/signup', 'POST', { username: 'Ade', email: 'nope', password: 'secret1' })).ok, false);
-  assert.strictEqual((await api('/api/signup', 'POST', { username: 'Ade', email: 'ade@mail.com', password: '123' })).ok, false);
-  ok('bad sign-ups rejected (username, email, short password)');
+  // ---- Google sign-in + username
+  const signIn = (sub, email, v = 'verified') => api('/api/google', 'POST', { credential: sub + '|' + email + '|' + v });
+  const cfg = await api('/api/config', 'GET');
+  assert('googleClientId' in cfg);
+  assert.strictEqual((await api('/api/google', 'POST', {})).ok, false);
+  assert.strictEqual((await signIn('g-1', 'ade@mail.com', 'unverified')).status, 401);
+  assert.strictEqual((await api('/api/google', 'POST', { credential: 'garbage' })).status, 401);
+  ok('Google sign-in rejects missing, bad and unverified-email tokens');
 
-  const ade = await api('/api/signup', 'POST', { username: 'Ade', email: 'ade@mail.com', password: 'secret1' });
-  assert(ade.ok && ade.token);
-  assert.strictEqual((await api('/api/signup', 'POST', { username: 'ade', email: 'other@mail.com', password: 'secret1' })).ok, false);
-  assert.strictEqual((await api('/api/signup', 'POST', { username: 'Other', email: 'ADE@mail.com', password: 'secret1' })).ok, false);
-  ok('sign-up works; duplicate username/email rejected (case-insensitive)');
+  const adeIn = await signIn('g-ade', 'ade@mail.com');
+  assert(adeIn.ok && adeIn.token && adeIn.needsUsername === true && adeIn.user.username === null);
+  assert.strictEqual((await api('/api/me', 'GET', null, adeIn.token)).needsUsername, true);
+  ok('first Google sign-in creates an account that needs a username');
 
-  const bola = await api('/api/signup', 'POST', { username: 'Bola', email: 'bola@mail.com', password: 'secret2' });
-  assert(bola.ok);
-  assert.strictEqual((await api('/api/login', 'POST', { login: 'Ade', password: 'wrong' })).status, 401);
-  const viaEmail = await api('/api/login', 'POST', { login: 'ADE@mail.com', password: 'secret1' });
-  assert(viaEmail.ok && viaEmail.user.username === 'Ade');
-  assert.strictEqual((await api('/api/me', 'GET', null, viaEmail.token)).user.username, 'Ade');
+  // a player without a username cannot join the leaderboard
+  const early = client(port);
+  await early.ready;
+  const r0 = await early.emit('auth', { token: adeIn.token });
+  assert.strictEqual(r0.ok, false);
+  assert.strictEqual(r0.needsUsername, true);
+  early.sock.close();
+  ok('no leaderboard access until a username is chosen');
+
+  assert.strictEqual((await api('/api/username', 'POST', { username: 'Ade' })).status, 401);
+  for (const bad of ['ab', 'has space', 'way_too_long_username_x', 'Admin', 'a-b-c']) {
+    assert.strictEqual((await api('/api/username', 'POST', { username: bad }, adeIn.token)).ok, false, bad);
+  }
+  const named = await api('/api/username', 'POST', { username: 'Ade' }, adeIn.token);
+  assert(named.ok && named.user.username === 'Ade');
+  assert.strictEqual((await api('/api/username', 'POST', { username: 'Ade2' }, adeIn.token)).ok, false);
+  ok('username rules enforced; it can be set only once');
+
+  const bolaIn = await signIn('g-bola', 'bola@mail.com');
+  assert.strictEqual((await api('/api/username', 'POST', { username: 'ade' }, bolaIn.token)).ok, false);
+  assert((await api('/api/username', 'POST', { username: 'Bola' }, bolaIn.token)).ok);
+  ok('duplicate usernames rejected (case-insensitive)');
+
+  // sign in again: same account, no username prompt
+  const again = await signIn('g-ade', 'ade@mail.com');
+  assert(again.ok && again.needsUsername === false && again.user.username === 'Ade');
+  assert.strictEqual((await signIn('g-other', 'ADE@mail.com')).status, 409);
+  const ade = { token: again.token };
+  const bola = { token: bolaIn.token };
   assert.strictEqual((await api('/api/me', 'GET', null, 'bad-token')).status, 401);
-  await api('/api/logout', 'POST', null, viaEmail.token);
-  assert.strictEqual((await api('/api/me', 'GET', null, viaEmail.token)).status, 401);
-  ok('login by username or email; wrong password and bad tokens rejected; logout works');
+  await api('/api/logout', 'POST', null, again.token);
+  assert.strictEqual((await api('/api/me', 'GET', null, again.token)).status, 401);
+  ade.token = (await signIn('g-ade', 'ade@mail.com')).token;
+  ok('returning players skip the username step; one email = one account; logout works');
 
-  const adeUser = await store.findUserByLogin('ade');
-  assert(adeUser.hash && adeUser.hash !== 'secret1' && !JSON.stringify(adeUser).includes('secret1'));
-  ok('password is stored hashed');
+  const adeUser = await store.findUserByGoogleSub('g-ade');
+  assert(!('hash' in adeUser) && !('salt' in adeUser));
+  ok('no passwords are stored');
 
   // ---- play with two logged-in players and one guest
   const A = client(port), B = client(port), G = client(port);
@@ -124,7 +156,8 @@ async function main() {
   ok('live leaderboard updates; guests are not listed');
 
   // ---- a solo player does not earn leaderboard points
-  const reg = await api('/api/signup', 'POST', { username: 'Solo', email: 'solo@mail.com', password: 'secret3' });
+  const reg = await signIn('g-solo', 'solo@mail.com');
+  await api('/api/username', 'POST', { username: 'Solo' }, reg.token);
   const S = client(port);
   await S.ready;
   await S.emit('auth', { token: reg.token });
@@ -143,7 +176,7 @@ async function main() {
   // ---- winner selection (for yesterday)
   const yesterday = dayKey(Date.now() - 24 * 3600 * 1000);
   const adeId = adeUser.id;
-  const bolaId = (await store.findUserByLogin('bola')).id;
+  const bolaId = (await store.findUserByGoogleSub('g-bola')).id;
   await store.addPoints(yesterday, { id: adeId, username: 'Ade' }, 50);
   await store.addPoints(yesterday, { id: adeId, username: 'Ade' }, 10);   // 60 pts, 2 rounds
   await store.addPoints(yesterday, { id: bolaId, username: 'Bola' }, 90); // 90 pts but only 1 round
@@ -184,7 +217,7 @@ async function main() {
   const oldDay = dayKey(Date.now() - 6 * 24 * 3600 * 1000);
   await store.createWinner({ day: oldDay, userId: bolaId, username: 'Bola', points: 10, prize: 1000, status: 'pending', createdAt: Date.now() });
   const b2 = require('../board').createBoard({ store, mailer: async () => false });
-  const bolaUser = await store.findUserByLogin('bola');
+  const bolaUser = await store.findUserByGoogleSub('g-bola');
   const failed = await b2.claim(bolaUser, { bank: 'Kuda', accountNumber: '0123456789', accountName: 'Bola A' });
   assert.strictEqual(failed.ok, false);
   assert.strictEqual((await store.getWinner(oldDay)).status, 'pending');

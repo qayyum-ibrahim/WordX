@@ -360,9 +360,9 @@ io.on('connection', (socket) => {
     }
     try {
       const user = await store.findSessionUser(String(token));
-      if (!user) {
-        socket.data.user = null;
-        return reply({ ok: false });
+      if (!user || !user.username) {
+        socket.data.user = null; // not signed in, or has not picked a username yet
+        return reply({ ok: false, needsUsername: !!user });
       }
       socket.data.user = { id: user.id, username: user.username };
       reply({ ok: true, username: user.username });
@@ -536,7 +536,7 @@ async function init(opts = {}) {
     onUpdate: () => io.emit('leaderboard', board.snapshot()),
     onWinner: pushClaimToUser
   });
-  registerAuthRoutes(app, store);
+  registerAuthRoutes(app, store, { googleClientId: process.env.GOOGLE_CLIENT_ID, verifyGoogle: opts.googleVerifier });
 
   app.get('/api/leaderboard', (req, res) => res.json(board.snapshot()));
 
@@ -544,7 +544,7 @@ async function init(opts = {}) {
   app.post('/api/claim', claimRate, async (req, res) => {
     try {
       const user = await userFromRequest(store, req);
-      if (!user) return res.status(401).json({ ok: false, error: 'Please log in again.' });
+      if (!user || !user.username) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
       const out = await board.claim(user, req.body || {});
       res.status(out.ok ? 200 : 400).json(out);
     } catch (e) {

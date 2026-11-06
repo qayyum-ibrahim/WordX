@@ -11,7 +11,6 @@
   let lastOpened = 0;
   let user = null; // logged-in account, or null for a guest
   let board = null; // latest daily leaderboard
-  let authMode = 'login';
 
   // ---------- storage (wrapped: it can throw in private modes) ----------
   const store = {
@@ -346,55 +345,74 @@
   }
 
   function applyAuth() {
+    const named = !!(user && user.username);
     $('authGuest').classList.toggle('hidden', !!user);
-    $('authUser').classList.toggle('hidden', !user);
-    $('nameWrap').classList.toggle('hidden', !!user);
-    if (user) $('authName').textContent = user.username;
+    $('authUser').classList.toggle('hidden', !named);
+    $('nameWrap').classList.toggle('hidden', named);
+    if (named) $('authName').textContent = user.username;
+    $('nameModal').classList.toggle('hidden', !(user && !user.username));
     renderBoards();
   }
 
-  function openAuth(mode) {
-    authMode = mode;
-    const signup = mode === 'signup';
-    $('authTitle').textContent = signup ? 'Create your account' : 'Log in';
-    $('authSubmit').textContent = signup ? 'Sign up' : 'Log in';
-    $('authUsername').placeholder = signup ? 'Username (3-16 letters or numbers)' : 'Username or email';
-    $('authUsername').maxLength = signup ? 16 : 254;
-    $('authEmail').classList.toggle('hidden', !signup);
-    $('authPassword').autocomplete = signup ? 'new-password' : 'current-password';
-    $('authSwitch').textContent = signup ? 'I already have an account' : 'Create an account';
-    $('authError').textContent = '';
-    $('authModal').classList.remove('hidden');
-    $('authUsername').focus();
+  // ---- Google sign-in ----
+  let googleReady = false;
+  function inAppBrowser() {
+    return /FBAN|FBAV|Instagram|musical_ly|TikTok|BytedanceWebview|Line\//i.test(navigator.userAgent);
   }
-  function closeAuth() {
-    $('authModal').classList.add('hidden');
-    $('authPassword').value = '';
+  async function initGoogle() {
+    const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => ({}));
+    const note = $('googleNote');
+    if (!cfg.googleClientId) {
+      note.textContent = 'Sign-in is not available yet. You can still play as a guest.';
+      note.classList.remove('hidden');
+      return;
+    }
+    if (inAppBrowser()) {
+      note.textContent = 'Google sign-in may not work inside this app. If it fails, open WordX in Chrome or Safari.';
+      note.classList.remove('hidden');
+    }
+    const start = () => {
+      if (!window.google || !google.accounts) return setTimeout(start, 300);
+      google.accounts.id.initialize({ client_id: cfg.googleClientId, callback: onGoogle });
+      google.accounts.id.renderButton($('googleBtn'), { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'pill' });
+      googleReady = true;
+    };
+    start();
   }
-
-  $('openLogin').addEventListener('click', () => openAuth('login'));
-  $('openSignup').addEventListener('click', () => openAuth('signup'));
-  $('authSwitch').addEventListener('click', () => openAuth(authMode === 'signup' ? 'login' : 'signup'));
-  $('authClose').addEventListener('click', closeAuth);
-
-  $('authForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const username = $('authUsername').value.trim();
-    const password = $('authPassword').value;
-    const signup = authMode === 'signup';
-    const body = signup ? { username, email: $('authEmail').value.trim(), password } : { login: username, password };
-    $('authSubmit').disabled = true;
-    const res = await api(signup ? '/api/signup' : '/api/login', 'POST', body);
-    $('authSubmit').disabled = false;
+  async function onGoogle(resp) {
+    const res = await api('/api/google', 'POST', { credential: resp.credential });
     if (!res.ok) {
-      $('authError').textContent = res.error || 'Something went wrong.';
+      toast(res.error || 'Sign-in failed. Please try again.');
       return;
     }
     setToken(res.token);
     user = res.user;
     socket.emit('auth', { token: res.token });
     applyAuth();
-    closeAuth();
+    if (user.username) toast('Welcome back, ' + user.username + '!');
+    else setTimeout(() => $('usernameInput').focus(), 100);
+  }
+
+  $('nameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('nameSubmit').disabled = true;
+    const res = await api('/api/username', 'POST', { username: $('usernameInput').value.trim() });
+    $('nameSubmit').disabled = false;
+    if (!res.ok) {
+      if (res.status === 401) {
+        setToken(null);
+        user = null;
+        applyAuth();
+        toast('Please sign in again.');
+        return;
+      }
+      $('nameError').textContent = res.error || 'Something went wrong.';
+      return;
+    }
+    user = res.user;
+    $('nameError').textContent = '';
+    socket.emit('auth', { token: getToken() });
+    applyAuth();
     toast('Welcome, ' + user.username + '!');
   });
 
@@ -403,10 +421,12 @@
     setToken(null);
     user = null;
     socket.emit('auth', { token: null });
+    if (window.google && google.accounts) google.accounts.id.disableAutoSelect();
     applyAuth();
   }
   $('logoutBtn').addEventListener('click', logout);
 
+  initGoogle();
   if (getToken()) {
     api('/api/me', 'GET').then((res) => {
       if (res.ok) { user = res.user; applyAuth(); } else { setToken(null); }
@@ -484,8 +504,7 @@
       setToken(null);
       user = null;
       applyAuth();
-      openAuth('login');
-      toast('Please log in again to claim your prize.');
+      toast('Please sign in again to claim your prize.');
       return;
     }
     $('claimError').textContent = res.error || 'Something went wrong.';
