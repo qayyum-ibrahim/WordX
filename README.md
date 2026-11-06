@@ -48,3 +48,9 @@ Note: games in progress live in server memory and are lost if Render restarts th
 
 ## Add words
 Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5.
+
+## Working with Claude Code
+Open the repo in Claude Code. `CLAUDE.md` holds the project rules and `ROADMAP.md` holds the plan and status.
+- `/status` shows what is done and what is next.
+- `/next-phase` builds the next phase, tests it, updates `ROADMAP.md`, commits and pushes.
+- `/add-phase <idea>` adds a new phase to the roadmap.
