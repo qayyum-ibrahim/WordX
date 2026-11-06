@@ -9,6 +9,9 @@
   let offset = 0; // server time minus client time
   let lastKey = '';
   let lastOpened = 0;
+  let user = null; // logged-in account, or null for a guest
+  let board = null; // latest daily leaderboard
+  let authMode = 'login';
 
   // ---------- storage (wrapped: it can throw in private modes) ----------
   const store = {
@@ -48,6 +51,7 @@
   if (params.get('room')) $('codeInput').value = params.get('room').toUpperCase().slice(0, 4);
 
   function getName() {
+    if (user) return user.username;
     const n = $('nameInput').value.trim();
     if (!n) {
       $('homeError').textContent = 'Please enter your name first.';
@@ -68,13 +72,19 @@
     history.replaceState(null, '', '/');
   }
 
-  $('createBtn').addEventListener('click', () => {
+  function ensureAuth() {
+    if (!user) return Promise.resolve();
+    return new Promise((resolve) => socket.emit('auth', { token: getToken() }, resolve));
+  }
+
+  $('createBtn').addEventListener('click', async () => {
     const name = getName();
     if (!name) return;
+    await ensureAuth();
     socket.emit('create', { name }, handleEntry);
   });
 
-  $('joinBtn').addEventListener('click', () => {
+  $('joinBtn').addEventListener('click', async () => {
     const name = getName();
     if (!name) return;
     const code = $('codeInput').value.trim().toUpperCase();
@@ -82,6 +92,7 @@
       $('homeError').textContent = 'Enter the 4-letter room code.';
       return;
     }
+    await ensureAuth();
     socket.emit('join', { name, code }, handleEntry);
   });
 
@@ -295,6 +306,7 @@
 
   // ---------- timer ----------
   function tick() {
+    updateReset();
     if (!state) return;
     if (state.phase === 'round' && state.endsAt) {
       const left = Math.max(0, (state.endsAt - nowServer()) / 1000);
@@ -311,7 +323,183 @@
   }
   setInterval(tick, 250);
 
+  // ---------- accounts ----------
+  const getToken = () => { try { return localStorage.getItem('wordx_token'); } catch (e) { return null; } };
+  const setToken = (t) => {
+    try { if (t) localStorage.setItem('wordx_token', t); else localStorage.removeItem('wordx_token'); } catch (e) {}
+  };
+
+  async function api(path, method, body) {
+    const t = getToken();
+    try {
+      const res = await fetch(path, {
+        method,
+        headers: Object.assign({ 'Content-Type': 'application/json' }, t ? { Authorization: 'Bearer ' + t } : {}),
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const data = await res.json();
+      data.status = res.status;
+      return data;
+    } catch (e) {
+      return { ok: false, status: 0, error: 'Network problem. Check your connection.' };
+    }
+  }
+
+  function applyAuth() {
+    $('authGuest').classList.toggle('hidden', !!user);
+    $('authUser').classList.toggle('hidden', !user);
+    $('nameWrap').classList.toggle('hidden', !!user);
+    if (user) $('authName').textContent = user.username;
+    renderBoards();
+  }
+
+  function openAuth(mode) {
+    authMode = mode;
+    const signup = mode === 'signup';
+    $('authTitle').textContent = signup ? 'Create your account' : 'Log in';
+    $('authSubmit').textContent = signup ? 'Sign up' : 'Log in';
+    $('authUsername').placeholder = signup ? 'Username (3-16 letters or numbers)' : 'Username or email';
+    $('authUsername').maxLength = signup ? 16 : 254;
+    $('authEmail').classList.toggle('hidden', !signup);
+    $('authPassword').autocomplete = signup ? 'new-password' : 'current-password';
+    $('authSwitch').textContent = signup ? 'I already have an account' : 'Create an account';
+    $('authError').textContent = '';
+    $('authModal').classList.remove('hidden');
+    $('authUsername').focus();
+  }
+  function closeAuth() {
+    $('authModal').classList.add('hidden');
+    $('authPassword').value = '';
+  }
+
+  $('openLogin').addEventListener('click', () => openAuth('login'));
+  $('openSignup').addEventListener('click', () => openAuth('signup'));
+  $('authSwitch').addEventListener('click', () => openAuth(authMode === 'signup' ? 'login' : 'signup'));
+  $('authClose').addEventListener('click', closeAuth);
+
+  $('authForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = $('authUsername').value.trim();
+    const password = $('authPassword').value;
+    const signup = authMode === 'signup';
+    const body = signup ? { username, email: $('authEmail').value.trim(), password } : { login: username, password };
+    $('authSubmit').disabled = true;
+    const res = await api(signup ? '/api/signup' : '/api/login', 'POST', body);
+    $('authSubmit').disabled = false;
+    if (!res.ok) {
+      $('authError').textContent = res.error || 'Something went wrong.';
+      return;
+    }
+    setToken(res.token);
+    user = res.user;
+    socket.emit('auth', { token: res.token });
+    applyAuth();
+    closeAuth();
+    toast('Welcome, ' + user.username + '!');
+  });
+
+  async function logout() {
+    await api('/api/logout', 'POST');
+    setToken(null);
+    user = null;
+    socket.emit('auth', { token: null });
+    applyAuth();
+  }
+  $('logoutBtn').addEventListener('click', logout);
+
+  if (getToken()) {
+    api('/api/me', 'GET').then((res) => {
+      if (res.ok) { user = res.user; applyAuth(); } else { setToken(null); }
+    });
+  }
+
+  // ---------- leaderboard ----------
+  const fmt = (n) => Number(n).toLocaleString('en-NG');
+
+  function boardHtml() {
+    const b = board;
+    const mine = user ? user.username : null;
+    const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+    const rows = b.top.length
+      ? b.top.map((r) =>
+          '<li class="' + (r.username === mine ? 'me' : '') + '"><span class="rank">' + (medals[r.rank - 1] || r.rank) + '</span>' +
+          '<span class="name">' + esc(r.username) + '</span><span class="score">' + r.points + '</span></li>').join('')
+      : '<li class="empty muted">No scores yet today. Be the first!</li>';
+    const need = 'play at least ' + b.minRounds + ' rounds with 2 or more players to qualify.';
+    return '<div class="lb-head"><div><b>\u{1F3C6} Today\'s leaderboard</b><div class="muted">Top player wins \u20A6' + fmt(b.prize) + '</div></div>' +
+      '<div class="lb-reset"><span class="muted">Resets in</span><b class="lbReset">--:--:--</b></div></div>' +
+      '<ul class="plist lb-list">' + rows + '</ul>' +
+      '<div class="muted lb-note">' + (user ? 'Play' : 'Log in, then play') + ' ' + need.replace(/^play /, '') + '</div>' +
+      (b.lastWinner ? '<div class="lb-last">Yesterday\'s winner: <b>' + esc(b.lastWinner.username) + '</b> (' + b.lastWinner.points + ' pts)</div>' : '');
+  }
+
+  function renderBoards() {
+    if (!board) return;
+    const html = boardHtml();
+    document.querySelectorAll('.lb').forEach((el) => { el.innerHTML = html; });
+    updateReset();
+  }
+
+  function updateReset() {
+    if (!board) return;
+    const left = Math.max(0, Math.floor((board.resetsAt - nowServer()) / 1000));
+    const t = [Math.floor(left / 3600), Math.floor((left % 3600) / 60), left % 60]
+      .map((n) => String(n).padStart(2, '0')).join(':');
+    document.querySelectorAll('.lbReset').forEach((el) => { el.textContent = t; });
+  }
+
+  // ---------- prize claim (cannot be closed until the details are sent) ----------
+  const BANKS = ['Access Bank', 'GTBank', 'First Bank', 'UBA', 'Zenith Bank', 'Opay', 'PalmPay', 'Kuda', 'Moniepoint',
+    'Wema Bank', 'Sterling Bank', 'Fidelity Bank', 'Union Bank', 'Stanbic IBTC', 'Polaris Bank', 'FCMB', 'Ecobank',
+    'Keystone Bank', 'Providus Bank'];
+  $('bankList').innerHTML = BANKS.map((b) => '<option value="' + b + '"></option>').join('');
+
+  function openClaim(info) {
+    $('claimTitle').textContent = 'You won \u20A6' + fmt(info.prize) + '!';
+    $('claimSub').textContent = 'You were top of the leaderboard on ' + info.day + ' with ' + info.points +
+      ' points. Send your bank details to get paid.';
+    $('claimError').textContent = '';
+    $('claimModal').classList.remove('hidden');
+  }
+
+  $('claimForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('claimSubmit').disabled = true;
+    const res = await api('/api/claim', 'POST', {
+      bank: $('claimBank').value.trim(),
+      accountNumber: $('claimNumber').value,
+      accountName: $('claimName').value.trim()
+    });
+    $('claimSubmit').disabled = false;
+    if (res.ok) {
+      $('claimModal').classList.add('hidden');
+      $('claimNumber').value = '';
+      $('claimName').value = '';
+      toast('Sent! You will be paid soon.');
+      return;
+    }
+    if (res.status === 401) {
+      // login expired: ask them to log in again, then the prompt comes back
+      $('claimModal').classList.add('hidden');
+      setToken(null);
+      user = null;
+      applyAuth();
+      openAuth('login');
+      toast('Please log in again to claim your prize.');
+      return;
+    }
+    $('claimError').textContent = res.error || 'Something went wrong.';
+  });
+
   // ---------- socket events ----------
+  socket.on('leaderboard', (b) => {
+    board = b;
+    offset = b.serverNow - Date.now();
+    renderBoards();
+  });
+
+  socket.on('claim', openClaim);
+
   socket.on('state', (s) => {
     state = s;
     offset = s.serverNow - Date.now();
@@ -319,6 +507,8 @@
   });
 
   socket.on('connect', () => {
+    const token = getToken();
+    if (token) socket.emit('auth', { token });
     const saved = store.get();
     if (!saved) return;
     socket.emit('rejoin', saved, (res) => {

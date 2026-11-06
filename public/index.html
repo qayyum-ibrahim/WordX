@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#14102b" />
   <title>WordX - Guess the hidden word</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -15,9 +16,26 @@
       <div class="logo">Word<span>X</span></div>
       <p class="tagline">Guess the hidden word from its categories.<br />Fewer clues = more points.</p>
 
+      <div id="authBar" class="card auth-bar">
+        <div id="authGuest">
+          <div class="auth-title">&#127942; Win &#8358;1,000 every day</div>
+          <div class="muted">Log in to enter today's leaderboard.</div>
+          <div class="row gap">
+            <button id="openLogin" class="btn">Log in</button>
+            <button id="openSignup" class="btn primary">Sign up</button>
+          </div>
+        </div>
+        <div id="authUser" class="hidden auth-user">
+          <div>Playing as <b id="authName"></b></div>
+          <button id="logoutBtn" class="btn ghost small">Log out</button>
+        </div>
+      </div>
+
       <div class="card">
-        <label for="nameInput">Your name</label>
-        <input id="nameInput" type="text" maxlength="16" placeholder="e.g. Qayyum" autocomplete="off" />
+        <div id="nameWrap">
+          <label for="nameInput">Your name</label>
+          <input id="nameInput" type="text" maxlength="16" placeholder="e.g. Qayyum" autocomplete="off" />
+        </div>
 
         <button id="createBtn" class="btn primary">Create a room</button>
 
@@ -29,6 +47,8 @@
         </div>
         <p id="homeError" class="error"></p>
       </div>
+
+      <div class="card lb"></div>
 
       <div class="how card">
         <h3>How to play</h3>
@@ -57,6 +77,8 @@
         <h3>Players <span id="playerCount" class="muted"></span></h3>
         <ul id="lobbyPlayers" class="plist"></ul>
       </div>
+
+      <div class="card lb"></div>
 
       <div class="card">
         <h3>Rounds</h3>
@@ -119,12 +141,47 @@
       <div class="logo small">Word<span>X</span></div>
       <h2 class="center-text">Final results</h2>
       <div id="podium" class="card"></div>
+      <div class="card lb"></div>
       <button id="againBtn" class="btn primary big hidden">Play again</button>
       <p id="againNote" class="muted center-text hidden">Waiting for the host...</p>
       <button id="leaveFinal" class="btn ghost">Leave room</button>
     </section>
 
   </main>
+
+  <!-- Log in / sign up -->
+  <div id="authModal" class="overlay center hidden">
+    <div class="sheet">
+      <h3 id="authTitle">Log in</h3>
+      <form id="authForm">
+        <input id="authUsername" type="text" maxlength="254" placeholder="Username or email" autocomplete="username" autocapitalize="off" />
+        <input id="authEmail" type="text" maxlength="254" placeholder="Email" autocomplete="email" inputmode="email" autocapitalize="off" />
+        <input id="authPassword" type="password" maxlength="100" placeholder="Password" autocomplete="current-password" />
+        <p id="authError" class="error"></p>
+        <button id="authSubmit" class="btn primary big" type="submit">Log in</button>
+      </form>
+      <button id="authSwitch" class="btn ghost"></button>
+      <button id="authClose" class="btn ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Prize claim: cannot be closed until details are sent -->
+  <div id="claimModal" class="overlay center hidden">
+    <div class="sheet">
+      <div class="reveal-word">&#127881;</div>
+      <h3 id="claimTitle">You won!</h3>
+      <p id="claimSub" class="muted"></p>
+      <form id="claimForm">
+        <input id="claimBank" type="text" list="bankList" maxlength="60" placeholder="Bank (e.g. Opay)" autocomplete="off" />
+        <datalist id="bankList"></datalist>
+        <input id="claimNumber" type="text" inputmode="numeric" maxlength="12" placeholder="Account number (10 digits)" autocomplete="off" />
+        <input id="claimName" type="text" maxlength="80" placeholder="Account name" autocomplete="off" />
+        <p id="claimError" class="error"></p>
+        <button id="claimSubmit" class="btn primary big" type="submit">Send my details</button>
+      </form>
+      <p class="muted small">Your bank details go straight to the WordX admin by email so you can be paid. They are not saved in the game database.</p>
+    </div>
+  </div>
 
   <div id="toast" class="toast"></div>
 

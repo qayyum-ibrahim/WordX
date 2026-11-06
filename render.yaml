@@ -9,3 +9,19 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      - key: NODE_ENV
+        value: production
+      # Secrets: you type these in the Render dashboard (they are never stored in GitHub).
+      - key: MONGODB_URI
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      # Prize settings (change if you like).
+      - key: PRIZE_NAIRA
+        value: 1000
+      - key: PRIZE_MIN_ROUNDS
+        value: 5
+      - key: CLAIM_HOURS
+        value: 48

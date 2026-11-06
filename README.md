@@ -8,6 +8,15 @@ Five categories sit at the top. Only one is open at the start. Guess the hidden 
 |---|---|---|---|---|---|
 | Points | 20 | 15 | 10 | 5 | 0 |
 
+## Daily prize
+- Players sign up (username, email, password). Guests can still play, but only logged-in players are on the leaderboard.
+- The leaderboard adds up points for the day. It resets at midnight Lagos time.
+- A round counts only when 2 or more players are in the room.
+- To qualify, a player needs at least 5 rounds that day (`PRIZE_MIN_ROUNDS`). The top qualifying player wins N1,000 (`PRIZE_NAIRA`).
+- The winner gets a pop-up the next time they open the app. It stays until they send their bank details.
+- The details are emailed to the admin (`ADMIN_EMAIL`) through Resend. They are not saved in the database.
+- An unclaimed prize expires after 48 hours (`CLAIM_HOURS`).
+
 ## Rules
 - Each player has their own clue progress. The word is the same for everyone.
 - A round ends when everyone is done or after 60 seconds.
@@ -21,12 +30,15 @@ npm start        # http://localhost:3000
 npm test         # simulated multiplayer test
 ```
 
-## Deploy on Render
-1. Push this repo to GitHub.
-2. On render.com choose **New > Blueprint** and pick the repo.
-3. Render reads `render.yaml`, builds, and gives you a live link.
+## Set up the services
+1. **MongoDB Atlas** (free M0 cluster): create a database user, allow network access from anywhere (0.0.0.0/0, since Render's IPs change), and copy the connection string. Without `MONGODB_URI` the game runs in memory only and loses accounts and scores on restart.
+2. **Resend** (resend.com): create an API key. Use your own email as `ADMIN_EMAIL`. The default sender `onboarding@resend.dev` can only email the account owner, which is what we need. To use another sender, set `MAIL_FROM` after verifying a domain.
+3. **Render**: New > Blueprint, pick this repo, then fill in `MONGODB_URI`, `RESEND_API_KEY` and `ADMIN_EMAIL` when asked.
+4. Check the database connection: `MONGODB_URI="..." npm run test:mongo`.
 
-Note: rooms live in server memory. On the free plan the server sleeps after idle time and games in progress are lost on restart.
+Keep-alive: the free Render server sleeps after 15 minutes without traffic. Point UptimeRobot at `https://YOUR-APP.onrender.com/health` every 5 minutes.
+
+Note: games in progress live in server memory and are lost if Render restarts the server. Accounts, scores and winners are in MongoDB.
 
 ## Add words
 Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5.

@@ -6,6 +6,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { Server } = require('socket.io');
 const WORDS = require('./words');
+const { createStore } = require('./store');
+const { createBoard } = require('./board');
+const { registerAuthRoutes, userFromRequest, limiter } = require('./auth');
 
 // ---------- Settings ----------
 const PORT = process.env.PORT || 3000;
@@ -26,10 +29,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { pingInterval: 10000, pingTimeout: 20000 });
 
+app.set('trust proxy', 1); // Render sits behind a proxy
+app.use(express.json({ limit: '10kb' }));
 app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = new Map();
+const LB_MIN_PLAYERS = 2; // a round only counts for the daily leaderboard when 2+ players are in the room
+let store = null;
+let board = null;
 
 // ---------- Helpers ----------
 function norm(s) {
@@ -66,10 +74,11 @@ function newRoundState() {
   return { opened: 1, done: false, solved: false, points: 0, wrong: [] };
 }
 
-function newPlayer(room, name) {
+function newPlayer(room, name, userId = null) {
   return {
     pid: crypto.randomUUID(), // secret, used to rejoin
     id: crypto.randomBytes(4).toString('hex'), // public id
+    userId, // set when the player is logged in
     name,
     sid: null,
     connected: false,
@@ -203,6 +212,15 @@ function endRound(room) {
       ms: p.r.ms || 0
     }))
     .sort((a, b) => b.points - a.points || (a.solved === b.solved ? a.ms - b.ms : a.solved ? -1 : 1));
+
+  // Daily leaderboard: only logged-in players, and only when 2+ players shared the round.
+  if (board && room.players.size >= LB_MIN_PLAYERS) {
+    const entries = [...room.players.values()]
+      .filter((p) => p.userId)
+      .map((p) => ({ userId: p.userId, username: p.name, points: p.r.points }));
+    if (entries.length) board.record(entries).catch((e) => console.error('leaderboard record failed:', e.message));
+  }
+
   room.phase = 'between';
   room.endsAt = null;
   room.nextAt = Date.now() + BETWEEN_SECONDS * 1000;
@@ -299,13 +317,64 @@ function attach(socket, room, p) {
   p.graceTimer = null;
   p.sid = socket.id;
   p.connected = true;
-  socket.data = { code: room.code, pid: p.pid };
+  socket.data.code = room.code;
+  socket.data.pid = p.pid;
+}
+
+// Logged-in players always use their account name.
+function nameFor(socket, data) {
+  const u = socket.data.user;
+  return u ? u.username : cleanName(data && data.name);
+}
+
+function userIdOf(socket) {
+  return socket.data.user ? socket.data.user.id : null;
+}
+
+async function pushClaim(socket) {
+  const u = socket.data.user;
+  if (!u || !board) return;
+  try {
+    const info = await board.pendingClaim(u.id);
+    if (info) socket.emit('claim', info);
+  } catch (e) {
+    console.error('claim lookup failed:', e.message);
+  }
+}
+
+function pushClaimToUser(userId) {
+  for (const s of io.sockets.sockets.values()) {
+    if (s.data.user && s.data.user.id === userId) pushClaim(s);
+  }
 }
 
 io.on('connection', (socket) => {
+  if (board) socket.emit('leaderboard', board.snapshot());
+
+  socket.on('auth', async (data, cb) => {
+    const reply = typeof cb === 'function' ? cb : () => {};
+    const token = data && data.token;
+    if (!token || !store) {
+      socket.data.user = null;
+      return reply({ ok: !token });
+    }
+    try {
+      const user = await store.findSessionUser(String(token));
+      if (!user) {
+        socket.data.user = null;
+        return reply({ ok: false });
+      }
+      socket.data.user = { id: user.id, username: user.username };
+      reply({ ok: true, username: user.username });
+      pushClaim(socket);
+    } catch (e) {
+      reply({ ok: false });
+    }
+  });
+
   socket.on('create', (data, cb) => {
     if (typeof cb !== 'function') return;
-    const name = cleanName(data && data.name);
+    const name = nameFor(socket, data);
     if (!name) return cb({ ok: false, error: 'Please enter a name.' });
     const room = {
       code: makeCode(),
@@ -323,7 +392,7 @@ io.on('connection', (socket) => {
       joinSeq: 0,
       lastActive: Date.now()
     };
-    const p = newPlayer(room, name);
+    const p = newPlayer(room, name, userIdOf(socket));
     room.players.set(p.pid, p);
     room.hostId = p.id;
     rooms.set(room.code, room);
@@ -335,7 +404,7 @@ io.on('connection', (socket) => {
   socket.on('join', (data, cb) => {
     if (typeof cb !== 'function') return;
     const code = String((data && data.code) || '').toUpperCase().trim();
-    const name = cleanName(data && data.name);
+    const name = nameFor(socket, data);
     if (!name) return cb({ ok: false, error: 'Please enter a name.' });
     const room = rooms.get(code);
     if (!room) return cb({ ok: false, error: 'Room not found. Check the code.' });
@@ -343,7 +412,7 @@ io.on('connection', (socket) => {
     if (room.players.size >= MAX_PLAYERS) return cb({ ok: false, error: 'Room is full.' });
     const taken = [...room.players.values()].some((x) => x.name.toLowerCase() === name.toLowerCase());
     if (taken) return cb({ ok: false, error: 'That name is taken in this room.' });
-    const p = newPlayer(room, name);
+    const p = newPlayer(room, name, userIdOf(socket));
     room.players.set(p.pid, p);
     attach(socket, room, p);
     cb({ ok: true, code: room.code, pid: p.pid });
@@ -425,7 +494,8 @@ io.on('connection', (socket) => {
   socket.on('leave', () => {
     const c = ctx(socket);
     if (!c) return;
-    socket.data = {};
+    socket.data.code = null;
+    socket.data.pid = null;
     removePlayer(c.room, c.p);
   });
 
@@ -457,8 +527,45 @@ setInterval(() => {
   }
 }, 60 * 1000).unref();
 
-if (require.main === module) {
-  server.listen(PORT, () => console.log(`WordX running on port ${PORT}`));
+// Sets up the database, accounts, leaderboard and the 30-second background job.
+async function init(opts = {}) {
+  store = opts.store || (await createStore(process.env.MONGODB_URI));
+  board = createBoard({
+    store,
+    mailer: opts.mailer,
+    onUpdate: () => io.emit('leaderboard', board.snapshot()),
+    onWinner: pushClaimToUser
+  });
+  registerAuthRoutes(app, store);
+
+  app.get('/api/leaderboard', (req, res) => res.json(board.snapshot()));
+
+  const claimRate = limiter(10, 10 * 60 * 1000);
+  app.post('/api/claim', claimRate, async (req, res) => {
+    try {
+      const user = await userFromRequest(store, req);
+      if (!user) return res.status(401).json({ ok: false, error: 'Please log in again.' });
+      const out = await board.claim(user, req.body || {});
+      res.status(out.ok ? 200 : 400).json(out);
+    } catch (e) {
+      console.error('claim error:', e.message);
+      res.status(500).json({ ok: false, error: 'Something went wrong. Please try again.' });
+    }
+  });
+
+  await board.refreshNow();
+  if (!opts.skipStartupSettle) await board.tick(); // pick winners for any days missed while asleep
+  setInterval(() => board.tick().catch((e) => console.error('board tick failed:', e.message)), 30 * 1000).unref();
+  console.log('Storage: ' + store.kind);
 }
 
-module.exports = { server, rooms };
+if (require.main === module) {
+  init()
+    .then(() => server.listen(PORT, () => console.log(`WordX running on port ${PORT}`)))
+    .catch((e) => {
+      console.error('Failed to start:', e.message);
+      process.exit(1);
+    });
+}
+
+module.exports = { server, rooms, init, getStore: () => store, getBoard: () => board };

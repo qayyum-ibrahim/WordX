@@ -8,7 +8,7 @@ process.env.BETWEEN_SECONDS = '1';
 const assert = require('assert');
 const { io } = require('socket.io-client');
 const WORDS = require('../words');
-const { server, rooms } = require('../server');
+const { server, rooms, init } = require('../server');
 
 let passed = 0;
 function ok(name) { passed++; console.log('  ok  ' + name); }
@@ -46,6 +46,7 @@ async function main() {
   }
   ok('word list: ' + WORDS.length + ' unique words, 5 clues each');
 
+  await init(); // memory storage, since MONGODB_URI is not set in tests
   await new Promise((r) => server.listen(0, r));
   const port = server.address().port;
 

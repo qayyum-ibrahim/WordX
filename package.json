@@ -6,13 +6,15 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/sim.js"
+    "test": "node test/sim.js && node test/accounts.js",
+    "test:mongo": "node test/mongo-check.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2",
+    "mongodb": "^7.8.0",
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
