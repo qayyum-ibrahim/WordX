@@ -39,6 +39,7 @@ async function main() {
   assert(WORDS.length >= 15, 'need at least 15 words');
   const seen = new Set();
   for (const w of WORDS) {
+    assert(/^[A-Za-z]+$/.test(w.word), w.word + ' must be a single word (letters only)');
     assert.strictEqual(w.clues.length, 5, w.word + ' needs 5 clues');
     assert(!seen.has(w.word.toLowerCase()), 'duplicate word ' + w.word);
     seen.add(w.word.toLowerCase());
