@@ -5,11 +5,16 @@
 process.env.ROUND_SECONDS = '3';
 process.env.BETWEEN_SECONDS = '1';
 process.env.PRIZE_MIN_ROUNDS = '2';
+process.env.PRIZE_ACTIVE = 'on'; // most checks below use the prize; the paused prize has its own checks
+// Secret addresses: the site must never show them.
+process.env.ADMIN_EMAIL = 'owner-secret@example.org';
+process.env.CONTACT_EMAIL = 'ads-secret@example.org';
 
 const assert = require('assert');
 const { io } = require('socket.io-client');
 const { memoryStore } = require('../store');
-const { dayKey } = require('../board');
+const { dayKey, createBoard, sendMail, prizeOn } = require('../board');
+const { checkContact } = require('../sponsor');
 const { server, rooms, init, getStore, getBoard } = require('../server');
 const { createDictionary } = require('../dictionary');
 
@@ -53,6 +58,7 @@ function client(port) {
 
 async function main() {
   const mails = [];
+  let mailOk = true;
   await init({
     store: memoryStore(),
     // Fake Google check: the "credential" is "sub|email|verified"
@@ -64,7 +70,7 @@ async function main() {
     // Wiktionary is "down" for this whole test: games and scores must still work.
     dictionary: createDictionary({ enabled: true, fetch: async () => { throw new Error('dictionary down (expected in this test)'); } }),
     skipStartupSettle: true, // the test adds yesterday's scores itself before settling
-    mailer: async (subject, text) => { mails.push({ subject, text }); return true; }
+    mailer: async (subject, text, opts) => { mails.push({ subject, text, opts }); return mailOk; }
   });
   await new Promise((r) => server.listen(0, r));
   const port = server.address().port;
@@ -260,6 +266,114 @@ async function main() {
   assert.strictEqual((await api('/api/sponsor', 'GET')).sponsor, null);
   delete process.env.SPONSOR_NAME;
   ok('sponsor banner, anonymous visitor count, click redirect and stats work; non-https sponsor links refused');
+
+  // ---- prize paused (the default)
+  delete process.env.PRIZE_ACTIVE;
+  assert.strictEqual(prizeOn(), false);
+  process.env.PRIZE_ACTIVE = 'off';
+  assert.strictEqual(prizeOn(), false);
+  const pStore = memoryStore();
+  const picked = [];
+  const pBoard = createBoard({ store: pStore, onWinner: (id) => picked.push(id) });
+  await pStore.addPoints(yesterday, { id: 'u1', username: 'Tobi' }, 50);
+  await pStore.addPoints(yesterday, { id: 'u1', username: 'Tobi' }, 50);
+  await pBoard.settle();
+  assert.strictEqual((await pStore.getWinner(yesterday)).status, 'paused');
+  assert.strictEqual((await pStore.getWinner(yesterday)).userId, null);
+  assert.deepStrictEqual(picked, []);
+  assert.strictEqual(await pBoard.pendingClaim('u1'), null);
+  assert.strictEqual((await pBoard.refreshNow()).prizeOn, false);
+  assert.strictEqual((await pBoard.refreshNow()).lastWinner, null);
+  ok('prize paused: no winner picked, no claim prompt, board says prize is off');
+
+  process.env.PRIZE_ACTIVE = 'on';
+  await pBoard.settle();
+  assert.strictEqual((await pStore.getWinner(yesterday)).status, 'paused');
+  assert.deepStrictEqual(picked, []);
+  assert.strictEqual((await pBoard.refreshNow()).prizeOn, true);
+  ok('switching the prize back on does not pay days that were paused');
+
+  // a prize already won before the pause can still be claimed
+  process.env.PRIZE_ACTIVE = 'off';
+  const preDay = dayKey(Date.now() - 5 * 24 * 3600 * 1000);
+  await pStore.createWinner({ day: preDay, userId: 'u2', username: 'Kemi', points: 40, prize: 1000, status: 'pending', createdAt: Date.now() });
+  assert.strictEqual((await pBoard.pendingClaim('u2')).day, preDay);
+  ok('a prize won before the pause can still be claimed');
+  process.env.PRIZE_ACTIVE = 'on';
+
+  // ---- "Advertise here" contact form
+  const good = { name: 'Chidi Foods', email: 'chidi@brand.ng', message: 'We want to advertise our snacks on WordX.' };
+  assert.strictEqual(checkContact({ ...good, name: 'C' }).error !== undefined, true);
+  assert(checkContact({ ...good, name: 'x'.repeat(61) }).error);
+  for (const bad of ['', 'nope', 'a@b', 'a b@c.com', 'a@b.c', 'x@y.com\nBcc: z@z.com', 'x'.repeat(120) + '@y.com']) {
+    assert(checkContact({ ...good, email: bad }).error, bad);
+  }
+  assert(checkContact({ ...good, message: 'short' }).error);
+  assert(checkContact({ ...good, message: 'x'.repeat(1001) }).error);
+  assert(checkContact({ ...good, message: 'see http://a.com http://b.com https://c.com' }).error);
+  assert.strictEqual(checkContact({ ...good, name: 'Chidi\r\nBcc: x' }).name, 'Chidi Bcc: x');
+  assert.strictEqual(checkContact(good).email, 'chidi@brand.ng');
+  ok('contact form checks name, email, message length, links and line breaks');
+
+  const leaks = [];
+  const adv = async (body) => {
+    const res = await fetch(base + '/api/advertise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const text = await res.text();
+    leaks.push(text);
+    return { status: res.status, ...JSON.parse(text) };
+  };
+  mails.length = 0;
+  const sent = await adv(good);
+  assert(sent.ok);
+  assert.strictEqual(mails.length, 1);
+  assert(mails[0].subject.includes('Chidi Foods'));
+  assert(mails[0].text.includes('chidi@brand.ng') && mails[0].text.includes('snacks'));
+  assert.strictEqual(mails[0].opts.replyTo, 'chidi@brand.ng');
+  assert.strictEqual(mails[0].opts.to, 'ads-secret@example.org');
+  ok('contact form sends the message to the owner, with reply-to set to the sender');
+
+  const trapped = await adv({ ...good, website: 'http://spam.example' });
+  assert(trapped.ok);
+  assert.strictEqual(mails.length, 1);
+  ok('bots that fill the hidden field get "ok" but nothing is sent');
+
+  const badMail = await adv({ ...good, email: 'not-an-email' });
+  assert.strictEqual(badMail.status, 400);
+  assert.strictEqual(mails.length, 1);
+  mailOk = false;
+  const down = await adv(good);
+  assert.strictEqual(down.status, 502);
+  assert.strictEqual(down.ok, false);
+  mailOk = true;
+  ok('bad input is refused; a failed email is reported, not hidden');
+
+  assert((await adv(good)).ok);
+  assert.strictEqual((await adv(good)).status, 429);
+  ok('contact form is rate limited (5 per hour per device)');
+
+  for (const path of ['/', '/app.js', '/index.html', '/api/config', '/api/sponsor', '/api/stats', '/api/leaderboard', '/stats']) {
+    leaks.push(await (await fetch(base + path)).text());
+  }
+  for (const t of leaks) assert(!t.includes('secret@example.org'), 'owner email leaked');
+  ok('the owner\'s email never appears on the site or in any reply');
+
+  // the real mailer: sends reply_to to Resend and uses CONTACT_EMAIL
+  const realFetch = global.fetch;
+  let call = null;
+  global.fetch = async (url, o) => { call = { url, body: JSON.parse(o.body) }; return { ok: true }; };
+  process.env.RESEND_API_KEY = 're_test_key';
+  try {
+    assert.strictEqual(await sendMail('s', 't', { to: 'ads-secret@example.org', replyTo: 'chidi@brand.ng' }), true);
+    assert.deepStrictEqual(call.body.to, ['ads-secret@example.org']);
+    assert.strictEqual(call.body.reply_to, 'chidi@brand.ng');
+    await sendMail('s', 't');
+    assert.deepStrictEqual(call.body.to, ['owner-secret@example.org']);
+    assert(!('reply_to' in call.body));
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.RESEND_API_KEY;
+  }
+  ok('Resend request uses the right inbox and reply-to (no real email sent)');
 
   [A, B, G, S].forEach((c) => c.sock.close());
   console.log('\nAll ' + passed + ' account checks passed.');

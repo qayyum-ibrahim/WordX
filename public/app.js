@@ -454,7 +454,9 @@
     } catch (e) { /* storage blocked: skip visit count */ }
     if (vid) api('/api/visit', 'POST', { vid });
     fetch('/api/sponsor').then((r) => r.json()).then(({ sponsor }) => {
-      if (!sponsor) return;
+      if (!sponsor) return; // keep the "Advertise here" space
+      $('adHouse').classList.add('hidden');
+      $('adLink').classList.remove('hidden');
       document.querySelectorAll('.sponsor').forEach((a) => {
         a.textContent = '';
         const tag = document.createElement('span');
@@ -476,6 +478,37 @@
     }).catch(() => {});
   })();
 
+  // ---------- "Advertise here" form (sent to the owner by email) ----------
+  function toggleAdForm(open) {
+    $('adForm').classList.toggle('hidden', !open);
+    ['adHouse', 'adLink'].forEach((id) => $(id).setAttribute('aria-expanded', String(open)));
+    $('adError').textContent = '';
+    if (open) $('adName').focus();
+  }
+  $('adHouse').addEventListener('click', () => toggleAdForm($('adForm').classList.contains('hidden')));
+  $('adLink').addEventListener('click', () => toggleAdForm($('adForm').classList.contains('hidden')));
+  $('adCancel').addEventListener('click', () => toggleAdForm(false));
+
+  $('adForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+      name: $('adName').value.trim(),
+      email: $('adEmail').value.trim(),
+      message: $('adMessage').value.trim(),
+      website: $('adWebsite').value
+    };
+    if (body.name.length < 2) return void ($('adError').textContent = 'Enter your name (2-60 letters).');
+    if (!/^\S+@\S+\.\S+$/.test(body.email)) return void ($('adError').textContent = 'Enter a valid email so we can reply.');
+    if (body.message.length < 10) return void ($('adError').textContent = 'Tell us a bit more (at least 10 letters).');
+    $('adSend').disabled = true;
+    const res = await api('/api/advertise', 'POST', body);
+    $('adSend').disabled = false;
+    if (!res.ok) return void ($('adError').textContent = res.error || 'Something went wrong.');
+    $('adName').value = $('adEmail').value = $('adMessage').value = '';
+    toggleAdForm(false);
+    toast('Thanks! We will reply by email.');
+  });
+
   // ---------- leaderboard ----------
   const fmt = (n) => Number(n).toLocaleString('en-NG');
 
@@ -488,8 +521,11 @@
           '<li class="' + (r.username === mine ? 'me' : '') + '"><span class="rank">' + (medals[r.rank - 1] || r.rank) + '</span>' +
           '<span class="name">' + esc(r.username) + '</span><span class="score">' + r.points + '</span></li>').join('')
       : '<li class="empty muted">No scores yet today. Be the first!</li>';
-    const need = 'play at least ' + b.minRounds + ' rounds with 2 or more players to qualify.';
-    return '<div class="lb-head"><div><b>\u{1F3C6} Today\'s leaderboard</b><div class="muted">Top player wins \u20A6' + fmt(b.prize) + '</div></div>' +
+    const need = b.prizeOn
+      ? 'play at least ' + b.minRounds + ' rounds with 2 or more players to qualify.'
+      : 'play with 2 or more players to get on the board.';
+    const prizeLine = b.prizeOn ? 'Top player wins \u20A6' + fmt(b.prize) : 'Daily prize: coming soon';
+    return '<div class="lb-head"><div><b>\u{1F3C6} Today\'s leaderboard</b><div class="muted">' + prizeLine + '</div></div>' +
       '<div class="lb-reset"><span class="muted">Resets in</span><b class="lbReset">--:--:--</b></div></div>' +
       '<ul class="plist lb-list">' + rows + '</ul>' +
       '<div class="muted lb-note">' + (user ? 'Play' : 'Sign in, then play') + ' ' + need.replace(/^play /, '') + '</div>' +
@@ -498,6 +534,7 @@
 
   function renderBoards() {
     if (!board) return;
+    $('prizeTitle').textContent = '\u{1F3C6} ' + (board.prizeOn ? 'Win \u20A6' + fmt(board.prize) + ' every day' : 'Daily prize: coming soon');
     const html = boardHtml();
     document.querySelectorAll('.lb').forEach((el) => { el.innerHTML = html; });
     updateReset();

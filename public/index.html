@@ -16,10 +16,38 @@
       <div class="logo">Word<span>X</span></div>
       <p class="tagline">Guess the hidden word from its categories.<br />Fewer clues = more points.</p>
 
+      <!-- Sponsor space: shows the sponsor, or "Advertise here" when there is none -->
+      <div class="ad-slot">
+        <a id="topSponsor" class="sponsor hidden" href="/go/sponsor" target="_blank" rel="noopener sponsored"></a>
+        <button id="adHouse" class="ad-house" type="button" aria-controls="adForm" aria-expanded="false">
+          <span class="sponsor-tag">Ad space</span>
+          <span class="ad-house-title">Advertise here</span>
+          <span class="muted small">Put your brand in front of WordX players. Tap to get in touch.</span>
+        </button>
+        <button id="adLink" class="ad-link hidden" type="button" aria-controls="adForm" aria-expanded="false">Advertise here</button>
+        <form id="adForm" class="card ad-form hidden" autocomplete="off" novalidate>
+          <h3>Advertise on WordX</h3>
+          <p class="muted small">Tell us about your brand. We will reply by email.</p>
+          <input id="adName" type="text" maxlength="60" placeholder="Your name or brand" autocomplete="name" />
+          <input id="adEmail" type="email" maxlength="120" placeholder="Your email" autocomplete="email" inputmode="email" />
+          <textarea id="adMessage" maxlength="1000" rows="4" placeholder="What would you like to advertise?"></textarea>
+          <!-- Trap for bots. People never see this field. -->
+          <div class="trap" aria-hidden="true">
+            <label for="adWebsite">Website</label>
+            <input id="adWebsite" type="text" name="website" tabindex="-1" autocomplete="off" />
+          </div>
+          <p id="adError" class="error"></p>
+          <div class="row">
+            <button id="adCancel" class="btn ghost" type="button">Cancel</button>
+            <button id="adSend" class="btn primary" type="submit">Send</button>
+          </div>
+        </form>
+      </div>
+
       <div id="authBar" class="card auth-bar">
         <div id="authGuest">
-          <div class="auth-title">&#127942; Win &#8358;1,000 every day</div>
-          <div class="muted">Sign in to enter today's leaderboard.</div>
+          <div id="prizeTitle" class="auth-title">&#127942; Daily prize: coming soon</div>
+          <div class="muted">Sign in to get on today's leaderboard.</div>
           <div id="googleBtn" class="google-btn"></div>
           <p id="googleNote" class="muted small hidden"></p>
         </div>
@@ -47,7 +75,6 @@
       </div>
 
       <div class="card lb"></div>
-      <a class="sponsor hidden" href="/go/sponsor" target="_blank" rel="noopener sponsored"></a>
 
       <div class="how card">
         <h3>How to play</h3>

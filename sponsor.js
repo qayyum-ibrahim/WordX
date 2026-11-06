@@ -2,9 +2,10 @@
 // Sponsor banner and public stats.
 // Set these in Render to show a sponsor (all optional except NAME and URL):
 //   SPONSOR_NAME, SPONSOR_TEXT, SPONSOR_URL (https only), SPONSOR_IMAGE (https image link)
+// "Advertise here" messages are emailed to CONTACT_EMAIL (or ADMIN_EMAIL). That address is never sent to the page.
 
 const crypto = require('crypto');
-const { dayKey } = require('./board');
+const { dayKey, sendMail } = require('./board');
 const { limiter } = require('./auth');
 
 const DAY = 24 * 3600 * 1000;
@@ -23,8 +24,26 @@ function getSponsor(env = process.env) {
   };
 }
 
-function registerSponsorRoutes(app, store) {
+const EMAIL_RE = /^[^\s@<>",;]{1,64}@[^\s@<>",;]{1,190}\.[A-Za-z]{2,24}$/;
+const oneLine = (v, max) => String(v || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
+
+// Checks an "Advertise here" message. Returns { error } or { name, email, message }.
+function checkContact(body) {
+  const b = body || {};
+  const name = oneLine(b.name, 61);
+  const email = oneLine(b.email, 121);
+  const message = String(b.message || '').trim();
+  if (name.length < 2 || name.length > 60) return { error: 'Enter your name (2-60 letters).' };
+  if (!EMAIL_RE.test(email) || email.length > 120) return { error: 'Enter a valid email so we can reply.' };
+  if (message.length < 10) return { error: 'Tell us a bit more (at least 10 letters).' };
+  if (message.length > 1000) return { error: 'Please keep the message under 1,000 letters.' };
+  if ((message.match(/https?:\/\//gi) || []).length > 2) return { error: 'Please use 2 links or fewer.' };
+  return { name, email, message };
+}
+
+function registerSponsorRoutes(app, store, { mailer = sendMail } = {}) {
   const rate = limiter(60, 10 * 60 * 1000);
+  const contactRate = limiter(5, 60 * 60 * 1000); // 5 tries per hour per IP
   const safe = (fn) => (req, res) => fn(req, res).catch((e) => { console.error('sponsor/stats error:', e.message); if (!res.headersSent) res.status(500).json({ ok: false }); });
 
   app.get('/api/sponsor', (req, res) => {
@@ -64,7 +83,31 @@ function registerSponsorRoutes(app, store) {
     });
   }));
 
+  app.post('/api/advertise', contactRate, safe(async (req, res) => {
+    const b = req.body || {};
+    // Hidden "website" field: people never see it, bots fill it in. Pretend it worked.
+    if (b.website) return res.json({ ok: true });
+    const c = checkContact(b);
+    if (c.error) return res.status(400).json({ ok: false, error: c.error });
+    const text = [
+      'New "Advertise here" message from WordX',
+      '',
+      'Name: ' + c.name,
+      'Email: ' + c.email,
+      '',
+      c.message
+    ].join('\n');
+    let sent = false;
+    try {
+      sent = await mailer('WordX advertising - ' + c.name, text, { to: process.env.CONTACT_EMAIL || undefined, replyTo: c.email });
+    } catch (e) {
+      sent = false;
+    }
+    if (!sent) return res.status(502).json({ ok: false, error: 'We could not send your message. Please try again later.' });
+    res.json({ ok: true });
+  }));
+
   app.get('/stats', (req, res) => res.sendFile(require('path').join(__dirname, 'public', 'stats.html')));
 }
 
-module.exports = { registerSponsorRoutes, getSponsor };
+module.exports = { registerSponsorRoutes, getSponsor, checkContact };

@@ -6,19 +6,21 @@ const PRIZE = Number(process.env.PRIZE_NAIRA) || 1000;
 const MIN_ROUNDS = Number(process.env.PRIZE_MIN_ROUNDS) || 5; // rounds a player needs to qualify
 const CLAIM_HOURS = Number(process.env.CLAIM_HOURS) || 48;
 const TOP_N = 10;
+// The cash prize is paused until we have sponsors. Set PRIZE_ACTIVE=on to switch it back on.
+const prizeOn = () => String(process.env.PRIZE_ACTIVE || '').toLowerCase() === 'on';
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
 
 const dayKey = (ts = Date.now()) => new Date(ts + HOUR).toISOString().slice(0, 10);
 const nextReset = (ts = Date.now()) => Date.parse(dayKey(ts) + 'T00:00:00Z') + DAY - HOUR;
 
-// Sends the payout details to the admin by email (Resend, over HTTPS).
-async function sendMail(subject, text) {
+// Sends an email to the admin (Resend, over HTTPS). opts.to and opts.replyTo are optional.
+async function sendMail(subject, text, opts = {}) {
   const key = process.env.RESEND_API_KEY;
-  const to = process.env.ADMIN_EMAIL;
+  const to = opts.to || process.env.ADMIN_EMAIL;
   if (!key || !to) {
     if (process.env.NODE_ENV === 'production') return false; // never pretend it was sent
-    console.log('[mail:dev] would send:', subject); // body has bank details, so it is not logged
+    console.log('[mail:dev] would send:', subject); // the body is not logged (it can hold bank details)
     return true;
   }
   const res = await fetch('https://api.resend.com/emails', {
@@ -28,14 +30,15 @@ async function sendMail(subject, text) {
       from: process.env.MAIL_FROM || 'WordX <onboarding@resend.dev>',
       to: [to],
       subject,
-      text
+      text,
+      ...(opts.replyTo ? { reply_to: opts.replyTo } : {})
     })
   });
   return res.ok;
 }
 
 function createBoard({ store, onUpdate = () => {}, onWinner = () => {}, mailer = sendMail }) {
-  let snap = { day: dayKey(), top: [], resetsAt: nextReset(), prize: PRIZE, minRounds: MIN_ROUNDS, lastWinner: null };
+  let snap = { day: dayKey(), top: [], resetsAt: nextReset(), prize: PRIZE, prizeOn: prizeOn(), minRounds: MIN_ROUNDS, lastWinner: null };
   let timer = null;
 
   async function build() {
@@ -47,6 +50,7 @@ function createBoard({ store, onUpdate = () => {}, onWinner = () => {}, mailer =
       top: top.map((r, i) => ({ rank: i + 1, username: r.username, points: r.points, rounds: r.rounds })),
       resetsAt: nextReset(),
       prize: PRIZE,
+      prizeOn: prizeOn(),
       minRounds: MIN_ROUNDS,
       lastWinner: w && w.userId ? { day: w.day, username: w.username, points: w.points } : null
     };
@@ -79,6 +83,11 @@ function createBoard({ store, onUpdate = () => {}, onWinner = () => {}, mailer =
     for (let back = 1; back <= 3; back++) {
       const day = dayKey(Date.now() - back * DAY);
       if (await store.getWinner(day)) continue;
+      // Prize paused: mark the day so it is never paid later, even if the prize is switched back on.
+      if (!prizeOn()) {
+        await store.createWinner({ day, userId: null, status: 'paused', createdAt: Date.now() });
+        continue;
+      }
       const top = await store.topEligible(day, MIN_ROUNDS);
       if (!top) {
         await store.createWinner({ day, userId: null, status: 'none', createdAt: Date.now() });
@@ -171,4 +180,4 @@ function createBoard({ store, onUpdate = () => {}, onWinner = () => {}, mailer =
   };
 }
 
-module.exports = { createBoard, dayKey, nextReset, PRIZE, MIN_ROUNDS };
+module.exports = { createBoard, dayKey, nextReset, sendMail, prizeOn, PRIZE, MIN_ROUNDS };

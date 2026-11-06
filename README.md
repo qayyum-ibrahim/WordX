@@ -9,6 +9,9 @@ Five categories sit at the top. Only one is open at the start. Guess the hidden 
 | Points | 20 | 15 | 10 | 5 | 0 |
 
 ## Daily prize
+**The cash prize is paused for now** (`PRIZE_ACTIVE=off`, the default). The site shows "Daily prize: coming soon". The leaderboard still works, but no winner is picked and nobody is asked to claim. Days played while paused are never paid later, even after the prize is switched back on. A prize already won before the pause can still be claimed. To switch the prize back on, set `PRIZE_ACTIVE=on` in Render.
+
+When the prize is on:
 - Players sign in with Google, then pick a username once. No passwords are stored. Guests can still play, but only signed-in players are on the leaderboard.
 - The leaderboard adds up points for the day. It resets at midnight Lagos time.
 - A round counts only when 2 or more players are in the room.
@@ -44,6 +47,10 @@ Note: games in progress live in server memory and are lost if Render restarts th
 ## Sponsor banner and stats
 - Public stats page: `/stats` (last 14 days: visitors, games, banner views, clicks). Show this to brands as proof.
 - To show a sponsor, set these in Render > Environment: `SPONSOR_NAME`, `SPONSOR_URL` (must be https), and optionally `SPONSOR_TEXT` and `SPONSOR_IMAGE` (an https image link). Remove `SPONSOR_NAME` to hide the banner.
+- The sponsor space sits at the top of the home page, under the game name. With no sponsor it shows "Advertise here".
+- Tapping "Advertise here" opens a small form (name, email, message). The message is emailed to `CONTACT_EMAIL`, or to `ADMIN_EMAIL` if that is empty, through Resend. Reply-to is set to the sender, so you can just press Reply. Your email is never shown on the site.
+- Spam protection: a hidden trap field, 5 tries per hour per device, length limits, and at most 2 links per message. It will not stop a determined person.
+- Resend's test sender (`onboarding@resend.dev`) can only email the address of your Resend account. If `CONTACT_EMAIL` is a different address, verify a domain in Resend and set `MAIL_FROM` first.
 - Visitors are counted once per device per day, with a hashed random id. Clicks go through `/go/sponsor`. These counts are simple: they do not filter bots or repeat clicks.
 
 ## Word meanings

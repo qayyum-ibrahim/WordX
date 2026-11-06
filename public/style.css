@@ -281,3 +281,20 @@ select option { color: #111; }
 .sponsor-text { font-weight: 600; font-size: .95rem; }
 .sponsor-tag { position: absolute; top: -8px; left: 12px; font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; background: #14102b; padding: 0 6px; color: #a79fd0; }
 .google-btn.hidden { display: none; }
+
+/* ---- Sponsor space and "Advertise here" form ---- */
+.ad-slot { margin: 2px 0 4px; }
+.ad-slot .sponsor { margin: 8px 0 0; }
+.ad-house { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: 8px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1.5px dashed rgba(255,255,255,.22); color: inherit; font: inherit; text-align: left; cursor: pointer; position: relative; }
+.ad-house:hover, .ad-house:focus-visible { border-color: var(--accent); }
+.ad-house-title { font-weight: 800; color: var(--accent); }
+.ad-house.hidden, .ad-link.hidden, .ad-form.hidden { display: none; }
+.ad-link { display: block; margin: 6px 0 0 auto; background: none; border: 0; padding: 4px 2px; color: var(--muted); font: inherit; font-size: .8rem; text-decoration: underline; cursor: pointer; }
+.ad-form { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 0; }
+.ad-form h3 { margin: 0; }
+.ad-form p.muted { margin: -4px 0 0; }
+.ad-form .error { margin: 0; min-height: 0; }
+.ad-form .row .btn { flex: 1; }
+.ad-form input[type="email"], .ad-form textarea { width: 100%; background: rgba(0, 0, 0, 0.3); color: var(--text); border: 1.5px solid var(--card-border); border-radius: 12px; padding: 14px; font: inherit; font-size: 1rem; outline: none; resize: vertical; }
+.ad-form input[type="email"]:focus, .ad-form textarea:focus { border-color: var(--accent-2); }
+.trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }

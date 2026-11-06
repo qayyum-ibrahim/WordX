@@ -563,7 +563,7 @@ async function init(opts = {}) {
   });
   registerAuthRoutes(app, store, { googleClientId: process.env.GOOGLE_CLIENT_ID, verifyGoogle: opts.googleVerifier });
 
-  registerSponsorRoutes(app, store);
+  registerSponsorRoutes(app, store, { mailer: opts.mailer });
 
   app.get('/api/leaderboard', (req, res) => res.json(board.snapshot()));
 

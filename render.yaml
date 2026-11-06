@@ -20,7 +20,13 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
+      # Optional: a different inbox for "Advertise here" messages. Leave empty to use ADMIN_EMAIL.
+      - key: CONTACT_EMAIL
+        sync: false
       # Prize settings (change if you like).
+      # The cash prize is paused until we have sponsors. Set to "on" to switch it back on.
+      - key: PRIZE_ACTIVE
+        value: "off"
       - key: PRIZE_NAIRA
         value: 1000
       - key: PRIZE_MIN_ROUNDS

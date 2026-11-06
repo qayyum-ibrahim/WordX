@@ -10,16 +10,10 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - **Phase 2b - Sponsor banner + stats** (done): env-set sponsor, anonymous visitor/click counts, public `/stats`.
 - **Phase 3 - Bigger word pool** (done): 179 words (about 40 Nigerian/African), word-list test, no repeat words in a room until the pool runs out.
 - **Phase 4 - Dictionary check and meanings** (done): short meaning after each round from Wiktionary (CC BY-SA, credited and linked), fetched in the background and fail safe. `npm run check:dictionary` checks all 179 words (all found on 2026-11-07). 17 words have our own meaning because Wiktionary's first sense was wrong for the game.
+- **Phase 5 - Sponsor space, contact form, prize paused** (done): sponsor space at the top of the home page, "Advertise here" when empty, contact form emailed via Resend (owner email never shown, trap field, rate limit, length and link limits). ₦1,000 prize paused with `PRIZE_ACTIVE=off`: "Daily prize: coming soon", no winner, no claim prompt. Paused days are never paid later.
 
 ## Phases
-### Phase 5 - Sponsor space, contact form, prize paused (next)
-- Move the sponsor banner to the top of the page, right after the game name and description.
-- When there is no sponsor, that space shows "Advertise here" so it advertises itself.
-- Small "Advertise here" contact form next to the banner. It sends the message to the owner through Resend. The owner's email is never shown on the site. Basic spam protection (hidden trap field, rate limit, length limits).
-- Pause the ₦1,000 daily prize until we have sponsors (owner OK given 2026-11-07). Show "Daily prize: coming soon" instead. No winner picked, no claim prompt. Keep the prize code so it can be switched back on with one setting.
-- Tests for the form (sends, rejects spam, never leaks the email) and for the paused prize. Phone-size screenshot check.
-
-### Phase 6 - Smooth updates (todo)
+### Phase 6 - Smooth updates (next)
 - First check Render's real shutdown time limit on the free plan. Do not guess it.
 - On shutdown, the server stops new games and lets running games finish before it exits (within that limit).
 - Players in the lobby see "Update coming, please wait" instead of starting a game that will be cut off.
@@ -54,8 +48,9 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - [ ] Read the 17 hand-written `meaning:` lines in `words.js` (Ankara, Zobo, Keke, Jollof, Torch and others). Claude wrote them; a person has not checked them.
 - [ ] Optional: run `npm run check:dictionary` and skim the Wiktionary meanings for any that read oddly for the game.
 - [ ] Sponsor outreach: set `SPONSOR_NAME` / `SPONSOR_URL` when a brand agrees.
-- [ ] Phase 5: decide where sponsor messages go. By default they go to `ADMIN_EMAIL`. If you want a separate inbox, make one and tell Claude.
-- [ ] Phase 5: when you have a sponsor and want the ₦1,000 prize back, tell Claude to switch it on.
+- [ ] Sponsor messages go to `ADMIN_EMAIL` now. For a separate inbox, set `CONTACT_EMAIL` in Render. With Resend's test sender this only works for your Resend account's own email; any other address needs a verified domain and `MAIL_FROM`.
+- [ ] After this deploy, send one test message through "Advertise here" on the live site and check it arrives (and is not in spam).
+- [ ] When you have a sponsor and want the ₦1,000 prize back, set `PRIZE_ACTIVE=on` in Render (Environment). Days before that stay unpaid.
 
 ## Change log
 - 2026-11-06: Phases 1-2b built. Roadmap and Claude Code commands added.
@@ -63,3 +58,4 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - 2026-11-07: Phase 3 done. Word list grown from 50 to 179, word checks added to `npm test`, rooms avoid repeat words across games.
 - 2026-11-07: Phase 4 done. Wiktionary meanings after each round, fail safe, `check:dictionary` script, 17 own meanings.
 - 2026-11-07: Added Phase 5 (sponsor space at top, contact form via Resend, ₦1,000 prize paused as "coming soon") and Phase 6 (smooth updates). Old Phases 5-7 are now 7-9.
+- 2026-11-07: Phase 5 done. Sponsor space at the top with "Advertise here", contact form via Resend, ₦1,000 prize paused (`PRIZE_ACTIVE`).
