@@ -363,6 +363,7 @@
     const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => ({}));
     const note = $('googleNote');
     if (!cfg.googleClientId) {
+      $('googleBtn').classList.add('hidden');
       note.textContent = 'Sign-in is not available yet. You can still play as a guest.';
       note.classList.remove('hidden');
       return;
@@ -433,6 +434,40 @@
     });
   }
 
+  // ---------- sponsor banner + anonymous visit count ----------
+  (function sponsorInit() {
+    let vid = null;
+    try {
+      vid = localStorage.getItem('wordx_vid');
+      if (!vid) {
+        vid = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+        localStorage.setItem('wordx_vid', vid);
+      }
+    } catch (e) { /* storage blocked: skip visit count */ }
+    if (vid) api('/api/visit', 'POST', { vid });
+    fetch('/api/sponsor').then((r) => r.json()).then(({ sponsor }) => {
+      if (!sponsor) return;
+      document.querySelectorAll('.sponsor').forEach((a) => {
+        a.textContent = '';
+        const tag = document.createElement('span');
+        tag.className = 'sponsor-tag';
+        tag.textContent = 'Sponsored';
+        a.appendChild(tag);
+        if (sponsor.image) {
+          const img = document.createElement('img');
+          img.src = sponsor.image;
+          img.alt = sponsor.name;
+          a.appendChild(img);
+        }
+        const t = document.createElement('span');
+        t.className = 'sponsor-text';
+        t.textContent = sponsor.text ? sponsor.name + ' - ' + sponsor.text : sponsor.name;
+        a.appendChild(t);
+        a.classList.remove('hidden');
+      });
+    }).catch(() => {});
+  })();
+
   // ---------- leaderboard ----------
   const fmt = (n) => Number(n).toLocaleString('en-NG');
 
@@ -449,7 +484,7 @@
     return '<div class="lb-head"><div><b>\u{1F3C6} Today\'s leaderboard</b><div class="muted">Top player wins \u20A6' + fmt(b.prize) + '</div></div>' +
       '<div class="lb-reset"><span class="muted">Resets in</span><b class="lbReset">--:--:--</b></div></div>' +
       '<ul class="plist lb-list">' + rows + '</ul>' +
-      '<div class="muted lb-note">' + (user ? 'Play' : 'Log in, then play') + ' ' + need.replace(/^play /, '') + '</div>' +
+      '<div class="muted lb-note">' + (user ? 'Play' : 'Sign in, then play') + ' ' + need.replace(/^play /, '') + '</div>' +
       (b.lastWinner ? '<div class="lb-last">Yesterday\'s winner: <b>' + esc(b.lastWinner.username) + '</b> (' + b.lastWinner.points + ' pts)</div>' : '');
   }
 

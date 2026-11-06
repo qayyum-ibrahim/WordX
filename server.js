@@ -7,8 +7,9 @@ const crypto = require('crypto');
 const { Server } = require('socket.io');
 const WORDS = require('./words');
 const { createStore } = require('./store');
-const { createBoard } = require('./board');
+const { createBoard, dayKey } = require('./board');
 const { registerAuthRoutes, userFromRequest, limiter } = require('./auth');
+const { registerSponsorRoutes } = require('./sponsor');
 
 // ---------- Settings ----------
 const PORT = process.env.PORT || 3000;
@@ -254,6 +255,7 @@ function checkAllDone(room) {
 }
 
 function startGame(room) {
+  if (store) store.bumpStat(dayKey(), 'games').catch(() => {});
   const count = Math.min(room.rounds, WORDS.length);
   room.rounds = count;
   room.words = shuffle(WORDS).slice(0, count);
@@ -537,6 +539,8 @@ async function init(opts = {}) {
     onWinner: pushClaimToUser
   });
   registerAuthRoutes(app, store, { googleClientId: process.env.GOOGLE_CLIENT_ID, verifyGoogle: opts.googleVerifier });
+
+  registerSponsorRoutes(app, store);
 
   app.get('/api/leaderboard', (req, res) => res.json(board.snapshot()));
 

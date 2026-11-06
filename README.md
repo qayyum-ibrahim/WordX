@@ -41,5 +41,10 @@ Keep-alive: the free Render server sleeps after 15 minutes without traffic. Poin
 
 Note: games in progress live in server memory and are lost if Render restarts the server. Accounts, scores and winners are in MongoDB.
 
+## Sponsor banner and stats
+- Public stats page: `/stats` (last 14 days: visitors, games, banner views, clicks). Show this to brands as proof.
+- To show a sponsor, set these in Render > Environment: `SPONSOR_NAME`, `SPONSOR_URL` (must be https), and optionally `SPONSOR_TEXT` and `SPONSOR_IMAGE` (an https image link). Remove `SPONSOR_NAME` to hide the banner.
+- Visitors are counted once per device per day, with a hashed random id. Clicks go through `/go/sponsor`. These counts are simple: they do not filter bots or repeat clicks.
+
 ## Add words
 Edit `words.js`. Each word needs 5 category clues, from broad (1) to specific (5). The word must fit all 5.

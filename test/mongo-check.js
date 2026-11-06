@@ -62,6 +62,17 @@ const { MongoClient } = require('mongodb');
     assert.strictEqual(await store.updateWinnerIf(day, 'pending', { status: 'claiming' }), false);
     console.log('  ok  winners: one per day, claim lock works');
 
+    await store.trackVisitor(day, 'v1');
+    await store.trackVisitor(day, 'v1');
+    await store.trackVisitor(day, 'v2');
+    await store.bumpStat(day, 'views');
+    await store.bumpStat(day, 'views');
+    await store.bumpStat(day, 'clicks');
+    const [row, empty] = await store.getStats([day, '2026-01-02']);
+    assert.deepStrictEqual(row, { day, visitors: 2, views: 2, clicks: 1, games: 0 });
+    assert.deepStrictEqual(empty, { day: '2026-01-02', visitors: 0, views: 0, clicks: 0, games: 0 });
+    console.log('  ok  stats: unique visitors per day, counters');
+
     console.log('\nMongoDB store works.');
   } finally {
     await store.close();

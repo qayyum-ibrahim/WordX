@@ -229,6 +229,31 @@ async function main() {
   assert.strictEqual((await store.getWinner(oldDay)).status, 'expired');
   ok('unclaimed prizes expire after 48 hours');
 
+  // ---- sponsor + stats
+  assert.strictEqual((await api('/api/sponsor', 'GET')).sponsor, null);
+  assert.strictEqual((await api('/api/visit', 'POST', { vid: 'x' })).status, 400);
+  assert((await api('/api/visit', 'POST', { vid: 'device-aaaa-1111' })).ok);
+  assert((await api('/api/visit', 'POST', { vid: 'device-aaaa-1111' })).ok);
+  assert((await api('/api/visit', 'POST', { vid: 'device-bbbb-2222' })).ok);
+  process.env.SPONSOR_NAME = 'Acme Snacks';
+  process.env.SPONSOR_TEXT = 'Tasty plantain chips';
+  process.env.SPONSOR_URL = 'https://example.com/?utm_source=wordx';
+  assert.strictEqual((await api('/api/sponsor', 'GET')).sponsor.name, 'Acme Snacks');
+  await api('/api/visit', 'POST', { vid: 'device-cccc-3333' });
+  const noFollow = await fetch(base + '/go/sponsor', { redirect: 'manual' });
+  assert.strictEqual(noFollow.status, 302);
+  assert.strictEqual(noFollow.headers.get('location'), 'https://example.com/?utm_source=wordx');
+  const st = await api('/api/stats', 'GET');
+  const today = st.days[st.days.length - 1];
+  assert.strictEqual(today.visitors, 3);   // same device counted once
+  assert.strictEqual(today.views, 1);      // only visits made while a sponsor was set
+  assert.strictEqual(today.clicks, 1);
+  assert(today.games >= 2);
+  process.env.SPONSOR_URL = 'http://insecure.example.com';
+  assert.strictEqual((await api('/api/sponsor', 'GET')).sponsor, null);
+  delete process.env.SPONSOR_NAME;
+  ok('sponsor banner, anonymous visitor count, click redirect and stats work; non-https sponsor links refused');
+
   [A, B, G, S].forEach((c) => c.sock.close());
   console.log('\nAll ' + passed + ' account checks passed.');
   server.close();

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WordX stats</title>
+  <link rel="icon" href="data:," />
+  <style>
+    body { margin: 0; background: #14102b; color: #fff; font-family: system-ui, sans-serif; padding: 20px; }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    h1 span { color: #f5b301; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0; }
+    .tile { background: rgba(255,255,255,.07); border-radius: 14px; padding: 14px; }
+    .tile b { display: block; font-size: 1.6rem; }
+    .tile span { color: #a79fd0; font-size: .85rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: right; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    th:first-child, td:first-child { text-align: left; }
+    .muted { color: #a79fd0; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Word<span>X</span> stats</h1>
+    <p class="muted">Last 14 days (Lagos time). Visitors are counted anonymously, once per device per day.</p>
+    <div id="tiles" class="grid"></div>
+    <table>
+      <thead><tr><th>Day</th><th>Visitors</th><th>Games</th><th>Banner views</th><th>Clicks</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="sp" class="muted"></p>
+  </div>
+  <script>
+    const fmt = (n) => Number(n).toLocaleString('en-NG');
+    fetch('/api/stats').then((r) => r.json()).then((d) => {
+      if (!d.ok) return;
+      const t = d.totals;
+      const tile = (v, l) => '<div class="tile"><b>' + v + '</b><span>' + l + '</span></div>';
+      document.getElementById('tiles').innerHTML =
+        tile(fmt(t.visitors), 'Visitor-days') + tile(fmt(t.games), 'Games started') + tile(fmt(t.views), 'Banner views') + tile(t.ctr + '%', 'Click rate (' + fmt(t.clicks) + ' clicks)');
+      document.getElementById('rows').innerHTML = d.days.slice().reverse().map((r) =>
+        '<tr><td>' + r.day + '</td><td>' + fmt(r.visitors) + '</td><td>' + fmt(r.games) + '</td><td>' + fmt(r.views) + '</td><td>' + fmt(r.clicks) + '</td></tr>').join('');
+      document.getElementById('sp').textContent = d.sponsor ? 'Current sponsor: ' + d.sponsor : '';
+    });
+  </script>
+</body>
+</html>

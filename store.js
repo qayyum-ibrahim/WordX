@@ -18,9 +18,22 @@ function memoryStore() {
   const sessions = new Map();
   const daily = new Map();
   const winners = new Map();
+  const stats = new Map(); // day -> { visitors:Set, views, clicks, games }
+  const statDay = (d) => {
+    if (!stats.has(d)) stats.set(d, { visitors: new Set(), views: 0, clicks: 0, games: 0 });
+    return stats.get(d);
+  };
 
   return {
     kind: 'memory',
+    async trackVisitor(day, vid) { statDay(day).visitors.add(vid); },
+    async bumpStat(day, key) { statDay(day)[key]++; },
+    async getStats(days) {
+      return days.map((day) => {
+        const s = statDay(day);
+        return { day, visitors: s.visitors.size, views: s.views, clicks: s.clicks, games: s.games };
+      });
+    },
 
     async createUser(u) {
       if (subIdx.has(u.googleSub)) throw new Error('ACCOUNT_EXISTS');
@@ -118,6 +131,8 @@ async function mongoStore(uri) {
   const sessions = db.collection('sessions');
   const daily = db.collection('daily_scores');
   const winners = db.collection('winners');
+  const visitors = db.collection('visitors');
+  const stats = db.collection('stats');
   const noId = { projection: { _id: 0 } };
 
   await users.createIndex({ googleSub: 1 }, { unique: true });
@@ -131,9 +146,31 @@ async function mongoStore(uri) {
   await daily.createIndex({ day: 1, points: -1, lastScoreAt: 1 });
   await winners.createIndex({ day: 1 }, { unique: true });
   await winners.createIndex({ userId: 1, status: 1 });
+  await visitors.createIndex({ day: 1, vid: 1 }, { unique: true });
+  await visitors.createIndex({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
+  await stats.createIndex({ day: 1 }, { unique: true });
 
   return {
     kind: 'mongo',
+    async trackVisitor(day, vid) {
+      try {
+        await visitors.insertOne({ day, vid, createdAt: new Date() });
+      } catch (e) {
+        if (!(e && e.code === 11000)) throw e; // already counted today
+      }
+    },
+    async bumpStat(day, key) {
+      await stats.updateOne({ day }, { $inc: { [key]: 1 } }, { upsert: true });
+    },
+    async getStats(days) {
+      const counters = await stats.find({ day: { $in: days } }, noId).toArray();
+      const vis = await visitors.aggregate([{ $match: { day: { $in: days } } }, { $group: { _id: '$day', n: { $sum: 1 } } }]).toArray();
+      return days.map((day) => {
+        const c = counters.find((x) => x.day === day) || {};
+        const v = vis.find((x) => x._id === day);
+        return { day, visitors: v ? v.n : 0, views: c.views || 0, clicks: c.clicks || 0, games: c.games || 0 };
+      });
+    },
 
     async createUser(u) {
       try {
