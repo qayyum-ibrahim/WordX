@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#14102b" />
+  <title>WordX - Guess the hidden word</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app">
+
+    <!-- HOME -->
+    <section id="home" class="view">
+      <div class="logo">Word<span>X</span></div>
+      <p class="tagline">Guess the hidden word from its categories.<br />Fewer clues = more points.</p>
+
+      <div class="card">
+        <label for="nameInput">Your name</label>
+        <input id="nameInput" type="text" maxlength="16" placeholder="e.g. Qayyum" autocomplete="off" />
+
+        <button id="createBtn" class="btn primary">Create a room</button>
+
+        <div class="or"><span>or join a friend</span></div>
+
+        <div class="row">
+          <input id="codeInput" type="text" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" />
+          <button id="joinBtn" class="btn">Join</button>
+        </div>
+        <p id="homeError" class="error"></p>
+      </div>
+
+      <div class="how card">
+        <h3>How to play</h3>
+        <ol>
+          <li>You see 1 category. The other 4 are hidden.</li>
+          <li>Guess the word. A right guess now = <b>20 points</b>.</li>
+          <li>A wrong guess opens the next category. Points drop: 15, 10, 5, then 0.</li>
+          <li>Most points after all rounds wins.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- LOBBY -->
+    <section id="lobby" class="view hidden">
+      <div class="logo small">Word<span>X</span></div>
+      <div class="card center">
+        <div class="muted">Room code</div>
+        <div id="roomCode" class="code">----</div>
+        <div class="row gap">
+          <button id="copyBtn" class="btn">Copy link</button>
+          <button id="shareBtn" class="btn">Share</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Players <span id="playerCount" class="muted"></span></h3>
+        <ul id="lobbyPlayers" class="plist"></ul>
+      </div>
+
+      <div class="card">
+        <h3>Rounds</h3>
+        <div class="stepper">
+          <button id="roundsMinus" class="btn round-btn" aria-label="Fewer rounds">&minus;</button>
+          <div id="roundsValue" class="rounds-value">5</div>
+          <button id="roundsPlus" class="btn round-btn" aria-label="More rounds">+</button>
+        </div>
+        <p id="roundsNote" class="muted center-text">Between 1 and 15 rounds.</p>
+      </div>
+
+      <button id="startBtn" class="btn primary big">Start game</button>
+      <p id="waitNote" class="muted center-text hidden">Waiting for the host to start...</p>
+      <button id="leaveLobby" class="btn ghost">Leave room</button>
+    </section>
+
+    <!-- GAME -->
+    <section id="game" class="view hidden">
+      <header class="topbar">
+        <div><span class="muted">Round</span> <b id="roundLabel">1/5</b></div>
+        <div id="timerText" class="timer-text">60</div>
+        <div><span class="muted">Score</span> <b id="myScore">0</b></div>
+      </header>
+      <div class="timer-track"><div id="timerBar" class="timer-bar"></div></div>
+
+      <div id="clues" class="clues"></div>
+
+      <div class="card center answer-card">
+        <div id="pointsPill" class="pill">20 pts</div>
+        <div id="pattern" class="pattern"></div>
+
+        <form id="guessForm" autocomplete="off">
+          <input id="guessInput" type="text" maxlength="40" placeholder="Type your guess..." autocomplete="off" autocapitalize="off" />
+          <button id="guessBtn" class="btn primary" type="submit">Guess</button>
+        </form>
+
+        <div id="wrongList" class="wrong"></div>
+        <div id="doneBanner" class="banner hidden"></div>
+      </div>
+
+      <div class="card">
+        <h3>Players</h3>
+        <ul id="gamePlayers" class="plist compact"></ul>
+      </div>
+
+      <!-- Round result overlay -->
+      <div id="reveal" class="overlay hidden">
+        <div class="sheet">
+          <div class="muted">The word was</div>
+          <div id="revealWord" class="reveal-word"></div>
+          <ul id="revealList" class="plist"></ul>
+          <div id="revealCount" class="muted center-text"></div>
+          <button id="skipBtn" class="btn primary hidden">Next now</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINAL -->
+    <section id="final" class="view hidden">
+      <div class="logo small">Word<span>X</span></div>
+      <h2 class="center-text">Final results</h2>
+      <div id="podium" class="card"></div>
+      <button id="againBtn" class="btn primary big hidden">Play again</button>
+      <p id="againNote" class="muted center-text hidden">Waiting for the host...</p>
+      <button id="leaveFinal" class="btn ghost">Leave room</button>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
