@@ -18,6 +18,7 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - Static image ads and a short motion ad for Facebook, TikTok and Instagram. While the prize is paused, the copy must not promise cash ("play free, prizes coming soon").
 - Check the real ad rules for cash-prize promotions on each platform before finalising copy. The owner must also check Nigerian rules for cash-prize promotions (not legal advice).
 - Save files under `marketing/`.
+- Progress: 15s motion ad, voiceover script and ChatGPT image prompts are in `marketing/`. Still to do: owner makes the static images and voiceover, platform rule check, then mark done.
 
 ### Phase 8 - Play-test and glitch pass (todo)
 - Simulate many players and rooms. Look for desync, timer bugs, reconnect bugs, memory growth.
@@ -56,3 +57,4 @@ Status values: `done`, `next`, `todo`. `/next-phase` builds the first phase that
 - 2026-11-07: Added Phase 5 (sponsor space at top, contact form via Resend, ₦1,000 prize paused as "coming soon") and Phase 6 (smooth updates). Old Phases 5-7 are now 7-9.
 - 2026-11-07: Phase 5 done. Sponsor space at the top with "Advertise here", contact form via Resend, ₦1,000 prize paused (`PRIZE_ACTIVE`).
 - 2026-11-07: Phase 6 done. Smooth updates: running games finish (up to 5 min) before the old server stops, "Tap to reload" after updates, shutdown test added to `npm test`.
+- 2026-11-07: Phase 7 started: motion ad video, voiceover script and image prompts added under `marketing/`.
